@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prototype/reference files (not shipped in app):
+    "photo-vault-ui.jsx",
   ]),
 ]);
 

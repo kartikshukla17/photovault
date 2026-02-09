@@ -1,26 +1,162 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --pv-font-sans: "DM Sans", system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --pv-font-display: "Playfair Display", Georgia, serif;
+
+  /* Dark theme - Gold/Amber accent */
+  --pv-bg-base: #080808;
+  --pv-bg-surface: #0c0c0c;
+  --pv-bg-elevated: #141414;
+  --pv-bg-border: #1e1e1e;
+  --pv-bg-hover: #252525;
+
+  --pv-text-primary: #f0f0f0;
+  --pv-text-secondary: #888888;
+  --pv-text-muted: #555555;
+  --pv-text-caption: #333333;
+
+  /* Gold/Amber accent colors */
+  --pv-accent-primary: #c8a97e;
+  --pv-accent-light: #e8c99e;
+  --pv-accent-dark: #9a6f3a;
+  --pv-accent-glow: rgba(200, 169, 126, 0.08);
+
+  --pv-success: #6fcf97;
+  --pv-warning: #f5a623;
+  --pv-danger: #eb5757;
+
+  --pv-radius-card: 14px;
+  --pv-radius-button: 10px;
+  --pv-radius-sheet: 20px;
+
+  /* Sidebar width */
+  --pv-sidebar-width: 210px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-bg-base: var(--pv-bg-base);
+  --color-bg-surface: var(--pv-bg-surface);
+  --color-bg-elevated: var(--pv-bg-elevated);
+  --color-bg-border: var(--pv-bg-border);
+  --color-bg-hover: var(--pv-bg-hover);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-text-primary: var(--pv-text-primary);
+  --color-text-secondary: var(--pv-text-secondary);
+  --color-text-muted: var(--pv-text-muted);
+  --color-text-caption: var(--pv-text-caption);
+
+  --color-accent-primary: var(--pv-accent-primary);
+  --color-accent-light: var(--pv-accent-light);
+  --color-accent-dark: var(--pv-accent-dark);
+  --color-accent-glow: var(--pv-accent-glow);
+
+  --color-success: var(--pv-success);
+  --color-warning: var(--pv-warning);
+  --color-danger: var(--pv-danger);
+
+  --radius-card: var(--pv-radius-card);
+  --radius-button: var(--pv-radius-button);
+  --radius-sheet: var(--pv-radius-sheet);
+
+  --font-sans: var(--pv-font-sans);
+  --font-display: var(--pv-font-display);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--pv-bg-base);
+  color: var(--pv-text-primary);
+  font-family: var(--pv-font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 3px;
+}
+
+::selection {
+  background: rgba(200, 169, 126, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* Photo cell hover effects */
+.photo-cell:hover .cell-overlay {
+  opacity: 1 !important;
+}
+
+.photo-cell:hover img {
+  transform: scale(1.04);
+}
+
+.photo-cell img {
+  transition: transform 0.3s ease;
+}
+
+/* Nav button hover */
+.nav-btn:hover {
+  background: #141414 !important;
+  color: #d0d0d0 !important;
+}
+
+/* Album tile hover */
+.album-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Pill hover */
+.pill:hover {
+  border-color: #333 !important;
+  color: #aaa !important;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area for mobile notch/home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Touch-friendly tap targets */
+@media (max-width: 767px) {
+  button, a, input, select, textarea {
+    min-height: 44px;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important; /* Prevent zoom on iOS */
+  }
 }
