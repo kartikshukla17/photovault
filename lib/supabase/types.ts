@@ -105,6 +105,44 @@ export interface Database {
           added_at?: string;
         };
       };
+      user_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          session_token: string;
+          device_info: string | null;
+          ip_address: string | null;
+          user_agent: string | null;
+          last_active_at: string;
+          created_at: string;
+          expires_at: string;
+          is_current: boolean;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          session_token: string;
+          device_info?: string | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          last_active_at?: string;
+          created_at?: string;
+          expires_at?: string;
+          is_current?: boolean;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          session_token?: string;
+          device_info?: string | null;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          last_active_at?: string;
+          created_at?: string;
+          expires_at?: string;
+          is_current?: boolean;
+        };
+      };
     };
     Views: {
       [_ in never]: never;

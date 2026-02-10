@@ -172,10 +172,48 @@ CREATE TRIGGER update_user_storage_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================
+-- USER SESSIONS (for session management & security)
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    session_token TEXT NOT NULL UNIQUE,
+    device_info TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+    is_current BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+
+-- Enable RLS on user_sessions
+ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Users can only see/manage their own sessions
+CREATE POLICY "Users can view own sessions" ON user_sessions
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own sessions" ON user_sessions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own sessions" ON user_sessions
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own sessions" ON user_sessions
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- =============================================
 -- DONE!
 -- Your database is now set up with:
 -- ✓ Tables for photos, albums, and their relationships
 -- ✓ Indexes for fast queries
 -- ✓ Row Level Security to isolate user data
 -- ✓ Automatic updated_at timestamps
+-- ✓ Session tracking for security
 -- =============================================

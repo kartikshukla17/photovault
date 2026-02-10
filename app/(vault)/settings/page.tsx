@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/vault/confirm-modal";
+import { SessionsCard } from "@/components/settings/sessions-card";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { useVault } from "@/lib/vault/vault-context";
@@ -352,6 +353,9 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+
+          {/* Session Security */}
+          <SessionsCard />
 
           {/* Danger Zone */}
           <div className="mt-[24px]">
