@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDownloadUrl } from "@/lib/s3/client";
+import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
 
 /**
  * GET /api/photos
@@ -23,6 +24,14 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let storage;
+    try {
+      storage = await getUserStorageConfigOrThrow(supabase, user.id);
+    } catch {
+      // Storage not configured yet -> return empty library (UI can prompt user to connect).
+      return NextResponse.json({ photos: [], storageConfigured: false });
     }
 
     const { searchParams } = new URL(request.url);
@@ -66,8 +75,8 @@ export async function GET(request: NextRequest) {
       (photos || []).map(async (photo: any) => ({
         id: photo.id,
         filename: photo.filename,
-        thumbUrl: await getDownloadUrl(photo.s3_key_thumb),
-        previewUrl: await getDownloadUrl(photo.s3_key_preview),
+        thumbUrl: await getDownloadUrl(storage, photo.s3_key_thumb),
+        previewUrl: await getDownloadUrl(storage, photo.s3_key_preview),
         sizeBytes: photo.size_bytes,
         width: photo.width,
         height: photo.height,

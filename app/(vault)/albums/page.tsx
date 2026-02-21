@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/vault/confirm-modal";
@@ -56,12 +55,10 @@ function AlbumCard({
       onTouchCancel={handleTouchEnd}
     >
       <div className="aspect-[4/3] relative overflow-hidden">
-        <Image
+        <img
           src={coverUrl}
           alt=""
-          fill
-          sizes="(max-width: 430px) 50vw, 215px"
-          className="object-cover transition-transform duration-300"
+          className="w-full h-full object-cover transition-transform duration-300"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_40%,rgba(0,0,0,0.75)_100%)]" />
         {icon && (

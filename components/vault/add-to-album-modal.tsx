@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { IconPlus } from "@/components/vault/icons";
@@ -144,14 +143,12 @@ export function AddToAlbumModal({
                         "text-left"
                       )}
                     >
-                      <div className="relative h-10 w-10 rounded-[10px] bg-bg-border overflow-hidden flex-shrink-0">
+                      <div className="h-10 w-10 rounded-[10px] bg-bg-border overflow-hidden flex-shrink-0">
                         {coverPhoto ? (
-                          <Image
+                          <img
                             src={coverPhoto.thumbUrl}
                             alt=""
-                            fill
-                            sizes="40px"
-                            className="object-cover"
+                            className="w-full h-full object-cover"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-text-muted text-[16px]">

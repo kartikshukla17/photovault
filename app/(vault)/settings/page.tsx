@@ -10,75 +10,36 @@ import { formatBytes } from "@/lib/format";
 import { useVault } from "@/lib/vault/vault-context";
 import { createClient } from "@/lib/supabase/client";
 
-const SETTINGS_GROUPS = [
-  {
-    section: "AWS Storage",
-    items: [
-      { label: "S3 Bucket", value: process.env.NEXT_PUBLIC_S3_BUCKET || "photo--vault", type: "info", active: true },
-      { label: "Region", value: process.env.NEXT_PUBLIC_AWS_REGION || "eu-north-1", type: "info", active: true },
-      { label: "CloudFront CDN", value: "Coming Soon", type: "coming-soon", active: false },
-      { label: "S3 Versioning", value: "Coming Soon", type: "coming-soon", active: false },
-    ],
-  },
-  {
-    section: "Image Processing",
-    items: [
-      { label: "Thumbnail generation", value: "Coming Soon", type: "coming-soon", active: false },
-      { label: "Preview generation", value: "Coming Soon", type: "coming-soon", active: false },
-      { label: "Convert HEIC → WebP", value: "Coming Soon", type: "coming-soon", active: false },
-      { label: "Extract EXIF metadata", value: "Coming Soon", type: "coming-soon", active: false },
-    ],
-  },
-  {
-    section: "Security",
-    items: [
-      { label: "Signed URL expiry", value: "15 min", type: "info", active: true },
-      { label: "Two-factor auth", value: "Coming Soon", type: "coming-soon", active: false },
-      { label: "Rate limit uploads", value: "Coming Soon", type: "coming-soon", active: false },
-    ],
-  },
-];
-
-function ToggleSwitch({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative w-[34px] h-[18px] rounded-[9px] flex-shrink-0 cursor-pointer transition-colors",
-        checked
-          ? "bg-[linear-gradient(135deg,#c8a97e,#9a6835)]"
-          : "bg-[#333]"
-      )}
-    >
-      <div
-        className={cn(
-          "absolute top-[2px] w-[14px] h-[14px] bg-white rounded-full transition-all shadow-[0_1px_4px_rgba(0,0,0,0.4)]",
-          checked ? "right-[2px]" : "left-[2px]"
-        )}
-      />
-    </button>
-  );
-}
+type StorageInfo = {
+  configured: boolean;
+  provider?: "aws_s3";
+  bucket?: string;
+  region?: string;
+  endpoint?: string | null;
+  quotaBytes?: number | null;
+  usedBytes?: number;
+  photoCount?: number;
+};
 
 export default function SettingsPage() {
   const router = useRouter();
   const vault = useVault();
   const [user, setUser] = React.useState<{ email: string } | null>(null);
-  const [toggleStates, setToggleStates] = React.useState<Record<string, boolean>>({
-    "CloudFront CDN": true,
-    "S3 Versioning": true,
-    "Convert HEIC → WebP": true,
-    "Extract EXIF metadata": true,
-    "Two-factor auth": true,
-  });
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [storage, setStorage] = React.useState<StorageInfo | null>(null);
+  const [loadingStorage, setLoadingStorage] = React.useState(true);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const [form, setForm] = React.useState({
+    bucket: "",
+    region: "",
+    endpoint: "",
+    accessKeyId: "",
+    secretAccessKey: "",
+    quotaGb: "",
+  });
 
   // Fetch user data on mount
   React.useEffect(() => {
@@ -90,6 +51,35 @@ export default function SettingsPage() {
       }
     }
     fetchUser();
+  }, []);
+
+  React.useEffect(() => {
+    async function fetchStorage() {
+      setLoadingStorage(true);
+      try {
+        const res = await fetch("/api/storage");
+        const data = (await res.json()) as StorageInfo & { error?: string };
+        if (!res.ok) throw new Error(data.error || "Failed to load storage");
+
+        setStorage(data);
+        setForm((prev) => ({
+          ...prev,
+          bucket: data.bucket || "",
+          region: data.region || "",
+          endpoint: data.endpoint || "",
+          quotaGb:
+            data.quotaBytes && data.quotaBytes > 0
+              ? String(Math.round(data.quotaBytes / 1024 ** 3))
+              : "",
+        }));
+      } catch (err) {
+        console.error(err);
+        setStorage({ configured: false });
+      } finally {
+        setLoadingStorage(false);
+      }
+    }
+    fetchStorage();
   }, []);
 
   // Get initials from email
@@ -117,12 +107,48 @@ export default function SettingsPage() {
     router.push("/login");
   };
 
-  const usedBytes = vault.photos.reduce((sum, p) => sum + p.sizeBytes, 0);
-  const totalBytes = 50 * 1024 ** 3;
-  const pct = (usedBytes / totalBytes) * 100;
+  const usedBytes =
+    storage?.usedBytes ?? vault.photos.reduce((sum, p) => sum + p.sizeBytes, 0);
+  const quotaBytes = storage?.quotaBytes ?? null;
+  const pct =
+    quotaBytes && quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : null;
 
-  const handleToggle = (label: string, checked: boolean) => {
-    setToggleStates((prev) => ({ ...prev, [label]: checked }));
+  const handleSaveStorage = async () => {
+    setSaveError(null);
+    setSaveSuccess(null);
+    setSaving(true);
+    try {
+      const quotaBytes =
+        form.quotaGb.trim() === ""
+          ? null
+          : Math.max(0, Number(form.quotaGb)) * 1024 ** 3;
+
+      const res = await fetch("/api/storage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "aws_s3",
+          bucket: form.bucket,
+          region: form.region,
+          endpoint: form.endpoint.trim() ? form.endpoint.trim() : null,
+          accessKeyId: form.accessKeyId,
+          secretAccessKey: form.secretAccessKey,
+          quotaBytes: quotaBytes && Number.isFinite(quotaBytes) ? quotaBytes : null,
+        }),
+      });
+      const data = (await res.json()) as StorageInfo & { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save storage");
+      }
+
+      setStorage(data);
+      setForm((prev) => ({ ...prev, accessKeyId: "", secretAccessKey: "" }));
+      setSaveSuccess("Storage connected.");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -181,63 +207,151 @@ export default function SettingsPage() {
               <div className="text-[14px] font-semibold text-text-primary">
                 Storage
               </div>
-              <div className="text-[10px] text-accent-primary bg-accent-glow px-[9px] py-[3px] rounded-[10px] border border-accent-primary/25">
-                us-east-1
+              {storage?.configured ? (
+                <div className="text-[10px] text-accent-primary bg-accent-glow px-[9px] py-[3px] rounded-[10px] border border-accent-primary/25">
+                  {storage.region}
+                </div>
+              ) : (
+                <div className="text-[10px] text-text-muted bg-[#141414] px-[9px] py-[3px] rounded-[10px] border border-bg-border">
+                  Not connected
+                </div>
+              )}
+            </div>
+
+            {pct !== null ? (
+              <>
+                <div className="h-[7px] bg-[#181818] rounded-[3px] overflow-hidden">
+                  <div
+                    className="h-full bg-[linear-gradient(90deg,var(--pv-accent-primary),var(--pv-accent-light))] rounded-[3px] transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="mt-[10px] text-[12px] text-text-secondary">
+                  {formatBytes(usedBytes)} used · {formatBytes(Math.max(0, quotaBytes! - usedBytes))} free
+                </div>
+              </>
+            ) : (
+              <div className="text-[12px] text-text-secondary">
+                {formatBytes(usedBytes)} used
               </div>
-            </div>
-            <div className="h-[7px] bg-[#181818] rounded-[3px] overflow-hidden">
-              <div
-                className="h-full bg-[linear-gradient(90deg,#c8a97e,#e8c99e)] rounded-[3px] transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="mt-[10px] flex items-center justify-between text-[12px] text-text-secondary">
-              <span>
-                {formatBytes(usedBytes)} used · {formatBytes(totalBytes - usedBytes)}{" "}
-                free
-              </span>
-              <span>~$0.03/day</span>
+            )}
+
+            <div className="mt-4 border-t border-[#141414] pt-4">
+              <div className="text-[10px] text-text-muted uppercase tracking-[1px] mb-2">
+                Bring your own storage (S3)
+              </div>
+
+              {loadingStorage ? (
+                <div className="text-[12px] text-text-muted">Loading…</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      value={form.bucket}
+                      onChange={(e) => setForm((p) => ({ ...p, bucket: e.target.value }))}
+                      placeholder="Bucket name (e.g. my-photo-bucket)"
+                      className={cn(
+                        "w-full px-3 py-2.5 rounded-[10px]",
+                        "bg-bg-elevated border border-bg-border",
+                        "text-[13px] text-text-primary placeholder:text-text-muted",
+                        "outline-none focus:border-accent-primary/50"
+                      )}
+                    />
+                    <input
+                      value={form.region}
+                      onChange={(e) => setForm((p) => ({ ...p, region: e.target.value }))}
+                      placeholder="Region (e.g. eu-north-1)"
+                      className={cn(
+                        "w-full px-3 py-2.5 rounded-[10px]",
+                        "bg-bg-elevated border border-bg-border",
+                        "text-[13px] text-text-primary placeholder:text-text-muted",
+                        "outline-none focus:border-accent-primary/50"
+                      )}
+                    />
+                    <input
+                      value={form.endpoint}
+                      onChange={(e) => setForm((p) => ({ ...p, endpoint: e.target.value }))}
+                      placeholder="Endpoint (optional, for S3-compatible providers)"
+                      className={cn(
+                        "w-full px-3 py-2.5 rounded-[10px]",
+                        "bg-bg-elevated border border-bg-border",
+                        "text-[13px] text-text-primary placeholder:text-text-muted",
+                        "outline-none focus:border-accent-primary/50"
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={form.accessKeyId}
+                        onChange={(e) => setForm((p) => ({ ...p, accessKeyId: e.target.value }))}
+                        placeholder="Access Key ID"
+                        className={cn(
+                          "w-full px-3 py-2.5 rounded-[10px]",
+                          "bg-bg-elevated border border-bg-border",
+                          "text-[13px] text-text-primary placeholder:text-text-muted",
+                          "outline-none focus:border-accent-primary/50"
+                        )}
+                      />
+                      <input
+                        value={form.secretAccessKey}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, secretAccessKey: e.target.value }))
+                        }
+                        placeholder="Secret Access Key"
+                        type="password"
+                        className={cn(
+                          "w-full px-3 py-2.5 rounded-[10px]",
+                          "bg-bg-elevated border border-bg-border",
+                          "text-[13px] text-text-primary placeholder:text-text-muted",
+                          "outline-none focus:border-accent-primary/50"
+                        )}
+                      />
+                    </div>
+                    <input
+                      value={form.quotaGb}
+                      onChange={(e) => setForm((p) => ({ ...p, quotaGb: e.target.value }))}
+                      placeholder="Quota (optional, GB) e.g. 50"
+                      inputMode="numeric"
+                      className={cn(
+                        "w-full px-3 py-2.5 rounded-[10px]",
+                        "bg-bg-elevated border border-bg-border",
+                        "text-[13px] text-text-primary placeholder:text-text-muted",
+                        "outline-none focus:border-accent-primary/50"
+                      )}
+                    />
+                  </div>
+
+                  <div className="mt-3 text-[11px] text-text-muted leading-relaxed">
+                    Keys are stored encrypted on the server and are only used to generate
+                    short-lived signed URLs.
+                  </div>
+
+                  {saveError ? (
+                    <div className="mt-3 text-[12px] text-danger">{saveError}</div>
+                  ) : null}
+                  {saveSuccess ? (
+                    <div className="mt-3 text-[12px] text-success">{saveSuccess}</div>
+                  ) : null}
+
+                  <div className="mt-3">
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={handleSaveStorage}
+                      disabled={
+                        saving ||
+                        !form.bucket.trim() ||
+                        !form.region.trim() ||
+                        !form.accessKeyId.trim() ||
+                        !form.secretAccessKey.trim()
+                      }
+                    >
+                      {saving ? "Saving…" : "Connect Storage"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-
-          {/* Settings Groups */}
-          {SETTINGS_GROUPS.map((group) => (
-            <div key={group.section} className="mt-[24px]">
-              <div className="text-[10px] text-text-muted uppercase tracking-[1px] mb-[10px]">
-                {group.section}
-              </div>
-              <div className="border border-bg-border rounded-[12px] overflow-hidden">
-                {group.items.map((item, i) => (
-                  <div
-                    key={item.label}
-                    className={cn(
-                      "flex items-center justify-between px-[15px] py-[13px] bg-[#0d0d0d]",
-                      i > 0 && "border-t border-[#141414]",
-                      item.type === "coming-soon" && "opacity-60"
-                    )}
-                  >
-                    <div className="text-[13px] text-text-secondary">
-                      {item.label}
-                    </div>
-                    {item.type === "coming-soon" ? (
-                      <div className="text-[10px] text-accent-primary/70 bg-accent-primary/10 px-[10px] py-[4px] rounded-full border border-accent-primary/20">
-                        Coming Soon
-                      </div>
-                    ) : item.type === "toggle" ? (
-                      <ToggleSwitch
-                        checked={toggleStates[item.label] ?? true}
-                        onChange={(checked) => handleToggle(item.label, checked)}
-                      />
-                    ) : (
-                      <div className="text-[11px] text-text-muted bg-[#141414] px-[9px] py-[3px] rounded-[6px]">
-                        {item.value}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
 
           {/* Danger Zone */}
           <div className="mt-[24px]">

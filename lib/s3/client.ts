@@ -1,6 +1,3 @@
-// S3 client configuration
-// You'll need to add: npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
-
 import {
   S3Client,
   PutObjectCommand,
@@ -9,30 +6,40 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-// Initialize S3 client
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-});
-
-const BUCKET = process.env.AWS_S3_BUCKET!;
-
 // URL expiry times
 const UPLOAD_URL_EXPIRY = 60 * 15; // 15 minutes for uploads
 const DOWNLOAD_URL_EXPIRY = 60 * 15; // 15 minutes for viewing
+
+export type S3Connection = {
+  bucket: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  endpoint?: string | null;
+};
+
+function createS3Client(conn: S3Connection) {
+  return new S3Client({
+    region: conn.region,
+    endpoint: conn.endpoint ?? undefined,
+    credentials: {
+      accessKeyId: conn.accessKeyId,
+      secretAccessKey: conn.secretAccessKey,
+    },
+  });
+}
 
 /**
  * Generate a pre-signed URL for uploading a file to S3
  */
 export async function getUploadUrl(
+  conn: S3Connection,
   key: string,
-  contentType: string
+  contentType: string,
 ): Promise<string> {
+  const s3Client = createS3Client(conn);
   const command = new PutObjectCommand({
-    Bucket: BUCKET,
+    Bucket: conn.bucket,
     Key: key,
     ContentType: contentType,
   });
@@ -43,9 +50,10 @@ export async function getUploadUrl(
 /**
  * Generate a pre-signed URL for viewing/downloading a file from S3
  */
-export async function getDownloadUrl(key: string): Promise<string> {
+export async function getDownloadUrl(conn: S3Connection, key: string): Promise<string> {
+  const s3Client = createS3Client(conn);
   const command = new GetObjectCommand({
-    Bucket: BUCKET,
+    Bucket: conn.bucket,
     Key: key,
   });
 
@@ -55,9 +63,10 @@ export async function getDownloadUrl(key: string): Promise<string> {
 /**
  * Delete an object from S3
  */
-export async function deleteObject(key: string): Promise<void> {
+export async function deleteObject(conn: S3Connection, key: string): Promise<void> {
+  const s3Client = createS3Client(conn);
   const command = new DeleteObjectCommand({
-    Bucket: BUCKET,
+    Bucket: conn.bucket,
     Key: key,
   });
 
@@ -68,14 +77,15 @@ export async function deleteObject(key: string): Promise<void> {
  * Delete multiple objects from S3 (original, preview, thumb)
  */
 export async function deletePhotoObjects(
+  conn: S3Connection,
   originalKey: string,
   previewKey: string,
   thumbKey: string
 ): Promise<void> {
   await Promise.all([
-    deleteObject(originalKey),
-    deleteObject(previewKey),
-    deleteObject(thumbKey),
+    deleteObject(conn, originalKey),
+    deleteObject(conn, previewKey),
+    deleteObject(conn, thumbKey),
   ]);
 }
 
