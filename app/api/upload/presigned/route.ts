@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getUploadUrl, generatePhotoKeys } from "@/lib/s3/client";
 import { randomUUID } from "crypto";
+import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
 
 /**
  * POST /api/upload/presigned
@@ -58,15 +59,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Generate pre-signed URLs for each file
+    let storage;
+    try {
+      storage = await getUserStorageConfigOrThrow(supabase, user.id);
+    } catch {
+      return NextResponse.json(
+        { error: "Storage not configured. Connect your S3 bucket in Settings." },
+        { status: 412 }
+      );
+    }
+
     const uploads = await Promise.all(
       files.map(async (file) => {
         const photoId = randomUUID();
         const keys = generatePhotoKeys(user.id, photoId, file.filename);
 
         const uploadUrls = {
-          original: await getUploadUrl(keys.original, file.contentType),
-          preview: await getUploadUrl(keys.preview, "image/webp"),
-          thumb: await getUploadUrl(keys.thumb, "image/webp"),
+          original: await getUploadUrl(storage, keys.original, file.contentType),
+          preview: await getUploadUrl(storage, keys.preview, "image/webp"),
+          thumb: await getUploadUrl(storage, keys.thumb, "image/webp"),
         };
 
         return {

@@ -47,6 +47,20 @@ CREATE TABLE IF NOT EXISTS album_photos (
     PRIMARY KEY (album_id, photo_id)
 );
 
+-- User storage connection (Bring Your Own Storage)
+CREATE TABLE IF NOT EXISTS user_storage (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL DEFAULT 'aws_s3',
+    bucket TEXT NOT NULL,
+    region TEXT NOT NULL,
+    endpoint TEXT,
+    quota_bytes BIGINT,
+    access_key_id_enc TEXT NOT NULL,
+    secret_access_key_enc TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =============================================
 -- INDEXES for performance
 -- =============================================
@@ -67,6 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_album_photos_photo_id ON album_photos(photo_id);
 ALTER TABLE photos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE albums ENABLE ROW LEVEL SECURITY;
 ALTER TABLE album_photos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_storage ENABLE ROW LEVEL SECURITY;
 
 -- Photos policies: Users can only see/modify their own photos
 CREATE POLICY "Users can view own photos" ON photos
@@ -110,6 +125,19 @@ CREATE POLICY "Users can delete own album_photos" ON album_photos
         EXISTS (SELECT 1 FROM albums WHERE albums.id = album_photos.album_id AND albums.user_id = auth.uid())
     );
 
+-- user_storage policies: user can manage their own storage connection
+CREATE POLICY "Users can view own storage" ON user_storage
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own storage" ON user_storage
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own storage" ON user_storage
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own storage" ON user_storage
+    FOR DELETE USING (auth.uid() = user_id);
+
 -- =============================================
 -- TRIGGERS for updated_at
 -- =============================================
@@ -129,6 +157,11 @@ CREATE TRIGGER update_photos_updated_at
 
 CREATE TRIGGER update_albums_updated_at
     BEFORE UPDATE ON albums
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_storage_updated_at
+    BEFORE UPDATE ON user_storage
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 

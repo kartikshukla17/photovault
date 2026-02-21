@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDownloadUrl, deletePhotoObjects } from "@/lib/s3/client";
+import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
 
 /**
  * GET /api/photos/[id]
@@ -23,6 +24,16 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    let storage;
+    try {
+      storage = await getUserStorageConfigOrThrow(supabase, user.id);
+    } catch {
+      return NextResponse.json(
+        { error: "Storage not configured" },
+        { status: 412 }
+      );
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: photo, error } = await (supabase as any)
       .from("photos")
@@ -39,9 +50,9 @@ export async function GET(
     const photoWithUrls = {
       id: photo.id,
       filename: photo.filename,
-      thumbUrl: await getDownloadUrl(photo.s3_key_thumb),
-      previewUrl: await getDownloadUrl(photo.s3_key_preview),
-      originalUrl: await getDownloadUrl(photo.s3_key_original),
+      thumbUrl: await getDownloadUrl(storage, photo.s3_key_thumb),
+      previewUrl: await getDownloadUrl(storage, photo.s3_key_preview),
+      originalUrl: await getDownloadUrl(storage, photo.s3_key_original),
       sizeBytes: photo.size_bytes,
       width: photo.width,
       height: photo.height,
@@ -133,6 +144,16 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    let storage;
+    try {
+      storage = await getUserStorageConfigOrThrow(supabase, user.id);
+    } catch {
+      return NextResponse.json(
+        { error: "Storage not configured" },
+        { status: 412 }
+      );
+    }
+
     // First, get the photo to retrieve S3 keys
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: photo, error: fetchError } = await (supabase as any)
@@ -169,6 +190,7 @@ export async function DELETE(
     // Delete from S3 (don't fail if S3 delete fails)
     try {
       await deletePhotoObjects(
+        storage,
         photo.s3_key_original,
         photo.s3_key_preview,
         photo.s3_key_thumb

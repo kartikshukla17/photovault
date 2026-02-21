@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import type { VaultPhoto } from "@/lib/vault/types";
 import { cn } from "@/lib/cn";
 
@@ -28,12 +27,12 @@ export function PhotoThumb({
       onClick={selectMode ? onToggleSelect : onOpen}
       aria-label={photo.filename}
     >
-      <Image
+      <img
         src={photo.thumbUrl}
         alt=""
-        fill
-        sizes="(max-width: 430px) 33vw, 143px"
-        className="object-cover"
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover"
       />
 
       {/* Hover overlay with location */}

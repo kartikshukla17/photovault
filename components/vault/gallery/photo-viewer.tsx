@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
@@ -224,23 +223,15 @@ export function PhotoViewer({
         </button>
 
         {/* Main Image */}
-        <div
+        <img
+          src={photo.previewUrl}
+          alt={photo.filename}
           className={cn(
-            "relative",
-            "w-[min(100%,calc(100%-130px))] h-[min(100%,calc(100vh-150px))]"
+            "max-w-[calc(100%-130px)] max-h-[calc(100vh-150px)]",
+            "object-contain rounded-[4px]",
+            "shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
           )}
-        >
-          <Image
-            src={photo.previewUrl}
-            alt={photo.filename}
-            fill
-            sizes="(max-width: 430px) 100vw, 430px"
-            className={cn(
-              "object-contain rounded-[4px]",
-              "shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
-            )}
-          />
-        </div>
+        />
 
         {/* Next Button */}
         <button
@@ -329,13 +320,7 @@ export function PhotoViewer({
               )}
               aria-label={`Open ${p.filename}`}
             >
-              <Image
-                src={p.thumbUrl}
-                alt=""
-                fill
-                sizes="44px"
-                className="object-cover"
-              />
+              <img src={p.thumbUrl} alt="" className="h-full w-full object-cover" />
             </button>
           );
         })}
