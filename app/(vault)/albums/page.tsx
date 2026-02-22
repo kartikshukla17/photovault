@@ -90,15 +90,19 @@ function CreateAlbumModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string) => Promise<void>;
 }) {
   const [name, setName] = React.useState("");
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return;
-    onCreate(name.trim());
-    setName("");
-    onClose();
+    try {
+      await onCreate(name.trim());
+      setName("");
+      onClose();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create album");
+    }
   };
 
   if (!open) return null;
@@ -188,8 +192,8 @@ export default function AlbumsPage() {
     router.push(`/gallery?album=${albumId}`);
   };
 
-  const handleCreateAlbum = (name: string) => {
-    vault.createAlbum(name);
+  const handleCreateAlbum = async (name: string) => {
+    await vault.createAlbum(name);
   };
 
   const handleDeleteAlbum = () => {
