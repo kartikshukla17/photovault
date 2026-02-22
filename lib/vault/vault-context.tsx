@@ -17,7 +17,7 @@ interface VaultContextValue extends VaultState {
 
   // Album actions
   setSelectedAlbum: (albumId: string | null) => void;
-  createAlbum: (name: string) => VaultAlbum;
+  createAlbum: (name: string) => Promise<VaultAlbum>;
   deleteAlbum: (id: string) => void;
   addPhotosToAlbum: (albumId: string, photoIds: string[]) => void;
   removePhotoFromAlbum: (albumId: string, photoId: string) => void;
@@ -95,14 +95,25 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const createAlbum = React.useCallback((name: string): VaultAlbum => {
-    const newAlbum: VaultAlbum = {
-      id: `album-${Date.now()}`,
-      name,
-      photoIds: [],
-    };
-    setAlbums((prev) => [...prev, newAlbum]);
-    return newAlbum;
+  const createAlbum = React.useCallback(async (name: string): Promise<VaultAlbum> => {
+    if (!name.trim()) {
+      throw new Error("Album name is required");
+    }
+
+    const response = await fetch("/api/albums", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.error || "Failed to create album");
+    }
+
+    const { album } = await response.json();
+    setAlbums((prev) => [...prev, album]);
+    return album;
   }, []);
 
   const deleteAlbum = React.useCallback((id: string) => {

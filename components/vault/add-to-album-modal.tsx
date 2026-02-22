@@ -24,12 +24,16 @@ export function AddToAlbumModal({
 
   const albums = vault.albums.filter((a) => a.id !== "all");
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newAlbumName.trim()) return;
-    const album = vault.createAlbum(newAlbumName.trim());
-    setNewAlbumName("");
-    setShowCreate(false);
-    onSelect(album.id);
+    try {
+      const album = await vault.createAlbum(newAlbumName.trim());
+      setNewAlbumName("");
+      setShowCreate(false);
+      onSelect(album.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to create album");
+    }
   };
 
   const handleClose = () => {
