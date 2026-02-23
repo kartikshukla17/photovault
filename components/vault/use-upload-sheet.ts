@@ -6,6 +6,10 @@ import { withSearchParams } from "@/lib/search-params";
 
 export type UploadSheetStep = "idle" | "uploading" | "done";
 
+export type UploadSheetContext = {
+  albumId?: string | null;
+};
+
 export function useUploadSheet() {
   const pathname = usePathname();
   const router = useRouter();
@@ -13,25 +17,39 @@ export function useUploadSheet() {
 
   const open = params.get("upload") === "1";
   const step = (params.get("uploadStep") ?? "idle") as UploadSheetStep;
+  const albumId = params.get("uploadAlbum");
 
   return {
     open,
     step,
-    openSheet(nextStep: UploadSheetStep = "idle") {
+    albumId,
+    openSheet(nextStep: UploadSheetStep = "idle", context?: UploadSheetContext) {
       router.replace(
-        withSearchParams(pathname, params, { upload: "1", uploadStep: nextStep }),
+        withSearchParams(pathname, params, {
+          upload: "1",
+          uploadStep: nextStep,
+          uploadAlbum: context?.albumId ?? null,
+        }),
         { scroll: false },
       );
     },
     setStep(nextStep: UploadSheetStep) {
       router.replace(
-        withSearchParams(pathname, params, { upload: "1", uploadStep: nextStep }),
+        withSearchParams(pathname, params, {
+          upload: "1",
+          uploadStep: nextStep,
+          uploadAlbum: albumId ?? null,
+        }),
         { scroll: false },
       );
     },
     closeSheet() {
       router.replace(
-        withSearchParams(pathname, params, { upload: null, uploadStep: null }),
+        withSearchParams(pathname, params, {
+          upload: null,
+          uploadStep: null,
+          uploadAlbum: null,
+        }),
         { scroll: false },
       );
     },

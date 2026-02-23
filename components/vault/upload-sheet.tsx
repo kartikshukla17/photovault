@@ -79,12 +79,13 @@ function UploadModal({
 }
 
 export function UploadSheet() {
-  const { open, step, closeSheet, setStep } = useUploadSheet();
+  const { open, step, closeSheet, setStep, albumId } = useUploadSheet();
   const [files, setFiles] = React.useState<SelectedFile[]>([]);
   const [dragging, setDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploadStartedRef = React.useRef(false);
   const filesRef = React.useRef<SelectedFile[]>([]);
+  const uploadedIdsRef = React.useRef<string[]>([]);
 
   // Keep filesRef in sync
   React.useEffect(() => {
@@ -107,6 +108,7 @@ export function UploadSheet() {
     const uploadFiles = async () => {
       const currentFiles = filesRef.current;
       if (currentFiles.length === 0) return;
+      uploadedIdsRef.current = [];
 
       try {
         // 1. Get pre-signed URLs from API
@@ -221,6 +223,15 @@ export function UploadSheet() {
               updated[i] = { ...updated[i], status: "done", progress: 100 };
               return updated;
             });
+            const { photo } = await photoRes.json();
+            if (photo?.id) {
+              uploadedIdsRef.current.push(photo.id);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(
+                  new CustomEvent("pv:photo-added", { detail: { photo } }),
+                );
+              }
+            }
           } catch (err) {
             // Update status to error
             setFiles((prev) => {
@@ -236,7 +247,19 @@ export function UploadSheet() {
 
         }
 
-        // All done
+        if (albumId && uploadedIdsRef.current.length > 0) {
+          await fetch(`/api/albums/${albumId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ addPhotoIds: uploadedIdsRef.current }),
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("pv:album-updated", { detail: { albumId } }),
+            );
+          }
+        }
+        uploadedIdsRef.current = [];
         setStep("done");
       } catch (err) {
         console.error("Upload error:", err);
@@ -247,12 +270,13 @@ export function UploadSheet() {
               : f
           )
         );
+        uploadedIdsRef.current = [];
         setStep("done");
       }
     };
 
     uploadFiles();
-  }, [step, setStep]);
+  }, [step, setStep, albumId]);
 
   const handleFileSelect = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;

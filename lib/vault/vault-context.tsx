@@ -3,6 +3,23 @@
 import * as React from "react";
 import type { VaultPhoto, VaultAlbum } from "./types";
 
+type PhotoApiResponse = {
+  photos?: Array<{
+    id: string;
+    filename: string;
+    sizeBytes: number;
+    takenAt: string;
+    device: string;
+    location: string;
+    width: number;
+    height: number;
+    backedUp: boolean;
+    thumbUrl?: string;
+    previewUrl?: string;
+    originalUrl?: string;
+  }>;
+};
+
 interface VaultState {
   photos: VaultPhoto[];
   albums: VaultAlbum[];
@@ -12,8 +29,8 @@ interface VaultState {
 
 interface VaultContextValue extends VaultState {
   // Photo actions
-  deletePhoto: (id: string) => void;
-  deletePhotos: (ids: string[]) => void;
+  deletePhoto: (id: string) => Promise<void>;
+  deletePhotos: (ids: string[]) => Promise<void>;
 
   // Album actions
   setSelectedAlbum: (albumId: string | null) => void;
@@ -37,44 +54,77 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [selectedAlbum, setSelectedAlbum] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
 
-  // Fetch photos and albums from API on mount
-  React.useEffect(() => {
-    async function fetchData() {
-      try {
-        const [photosRes, albumsRes] = await Promise.all([
-          fetch("/api/photos"),
-          fetch("/api/albums"),
-        ]);
-
-        if (photosRes.ok) {
-          const data = await photosRes.json();
-          // Parse takenAt strings into Date objects
-          const photos = (data.photos || []).map((p: Record<string, unknown>) => ({
-            ...p,
-            takenAt: new Date(p.takenAt as string),
-          }));
-          setPhotos(photos);
-        }
-
-        if (albumsRes.ok) {
-          const data = await albumsRes.json();
-          // Add "All Photos" album at the beginning
-          setAlbums([
-            { id: "all", name: "All Photos", photoIds: [] },
-            ...(data.albums || []),
-          ]);
-        }
-      } catch (error) {
-        console.error("Error fetching vault data:", error);
-      } finally {
-        setLoading(false);
-      }
+  const fetchPhotos = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/photos");
+      if (!res.ok) throw new Error("Failed to load photos");
+      const data = (await res.json()) as PhotoApiResponse;
+      const fetched = (data.photos || []).map((p) => ({
+        ...p,
+        takenAt: new Date(p.takenAt),
+        thumbUrl: p.thumbUrl ?? "",
+        previewUrl: p.previewUrl ?? "",
+        originalUrl: p.originalUrl ?? "",
+      }));
+      setPhotos(fetched);
+    } catch (error) {
+      console.error("Error fetching photos:", error);
     }
-
-    fetchData();
   }, []);
 
-  const deletePhoto = React.useCallback((id: string) => {
+  const fetchAlbums = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/albums");
+      if (!res.ok) throw new Error("Failed to load albums");
+      const data = await res.json();
+      setAlbums([{ id: "all", name: "All Photos", photoIds: photos.map((p) => p.id) }, ...(data.albums || [])]);
+    } catch (error) {
+      console.error("Error fetching albums:", error);
+    }
+  }, [photos]);
+
+  // Fetch photos and albums from API on mount
+  React.useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      await Promise.all([fetchPhotos(), fetchAlbums()]);
+      if (mounted) setLoading(false);
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [fetchPhotos, fetchAlbums]);
+
+  React.useEffect(() => {
+    const onPhotoAdded = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail?.photo) return;
+      setPhotos((prev) => [detail.photo, ...prev]);
+    };
+
+    const onAlbumUpdated = () => {
+      fetchAlbums();
+    };
+
+    window.addEventListener("pv:photo-added", onPhotoAdded);
+    window.addEventListener("pv:album-updated", onAlbumUpdated);
+
+    return () => {
+      window.removeEventListener("pv:photo-added", onPhotoAdded);
+      window.removeEventListener("pv:album-updated", onAlbumUpdated);
+    };
+  }, [fetchAlbums]);
+
+  const deletePhoto = React.useCallback(async (id: string) => {
+    const response = await fetch(`/api/photos/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: "Failed to delete photo" }));
+      throw new Error(payload.error ?? "Failed to delete photo");
+    }
+
     setPhotos((prev) => prev.filter((p) => p.id !== id));
     setAlbums((prev) =>
       prev.map((a) => ({
@@ -84,16 +134,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const deletePhotos = React.useCallback((ids: string[]) => {
-    const idSet = new Set(ids);
-    setPhotos((prev) => prev.filter((p) => !idSet.has(p.id)));
-    setAlbums((prev) =>
-      prev.map((a) => ({
-        ...a,
-        photoIds: a.photoIds.filter((pid) => !idSet.has(pid)),
-      }))
-    );
-  }, []);
+  const deletePhotos = React.useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(ids.map((id) => deletePhoto(id)));
+    const rejection = results.find((result) => result.status === "rejected");
+    if (rejection && rejection.status === "rejected") {
+      throw rejection.reason;
+    }
+  }, [deletePhoto]);
 
   const createAlbum = React.useCallback(async (name: string): Promise<VaultAlbum> => {
     if (!name.trim()) {

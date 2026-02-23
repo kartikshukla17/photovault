@@ -34,6 +34,7 @@ export default function GalleryClient() {
   const infoMode = params.get("info") === "1";
   const albumParam = params.get("album");
   const viewerOpen = Boolean(photoId);
+  const uploadLabel = albumParam && albumParam !== "all" ? "Upload to album" : "Upload";
 
   // Set selected album from URL param
   React.useEffect(() => {
@@ -110,10 +111,21 @@ export default function GalleryClient() {
     setShowDeleteConfirm(true);
   };
 
+  const handleDeleteError = (error: unknown) => {
+    console.error("Delete error:", error);
+    alert(error instanceof Error ? error.message : "Failed to delete photo(s)");
+  };
+
   const confirmDeleteSelected = () => {
-    vault.deletePhotos(Array.from(selected));
-    clearSelection();
     setShowDeleteConfirm(false);
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    vault
+      .deletePhotos(ids)
+      .then(() => {
+        clearSelection();
+      })
+      .catch(handleDeleteError);
   };
 
   const handleDeletePhoto = (id: string) => {
@@ -121,11 +133,15 @@ export default function GalleryClient() {
   };
 
   const confirmDeletePhoto = () => {
-    if (photoToDelete) {
-      vault.deletePhoto(photoToDelete);
-      setPhotoToDelete(null);
-      closeViewer();
-    }
+    if (!photoToDelete) return;
+    const id = photoToDelete;
+    vault
+      .deletePhoto(id)
+      .then(() => {
+        setPhotoToDelete(null);
+        closeViewer();
+      })
+      .catch(handleDeleteError);
   };
 
   const handleAddToAlbum = () => {
@@ -243,7 +259,12 @@ export default function GalleryClient() {
             </button>
 
             <button
-              onClick={() => openSheet("idle")}
+              onClick={() =>
+                openSheet(
+                  "idle",
+                  albumParam && albumParam !== "all" ? { albumId: albumParam } : undefined,
+                )
+              }
               className={cn(
                 "px-[16px] py-[8px] rounded-[8px]",
                 "bg-[linear-gradient(135deg,#c8a97e,#9a6835)]",
@@ -253,7 +274,7 @@ export default function GalleryClient() {
                 "active:scale-[0.98]"
               )}
             >
-              ⬆ Upload
+              ⬆ {uploadLabel}
             </button>
           </div>
         </div>
