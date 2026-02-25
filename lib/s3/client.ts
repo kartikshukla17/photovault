@@ -36,13 +36,19 @@ export async function getUploadUrl(
   conn: S3Connection,
   key: string,
   contentType: string,
+  storageClass?: string,
 ): Promise<string> {
   const s3Client = createS3Client(conn);
-  const command = new PutObjectCommand({
+  const params: Parameters<typeof PutObjectCommand>[0] = {
     Bucket: conn.bucket,
     Key: key,
     ContentType: contentType,
-  });
+  };
+  if (storageClass) {
+    params.StorageClass = storageClass;
+  }
+
+  const command = new PutObjectCommand(params);
 
   return getSignedUrl(s3Client, command, { expiresIn: UPLOAD_URL_EXPIRY });
 }

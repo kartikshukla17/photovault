@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDownloadUrl } from "@/lib/s3/client";
 import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
+import { getStorageCdnUrl } from "@/lib/storage/cdn";
 
 /**
  * GET /api/photos
@@ -75,8 +76,12 @@ export async function GET(request: NextRequest) {
       (photos || []).map(async (photo: any) => ({
         id: photo.id,
         filename: photo.filename,
-        thumbUrl: await getDownloadUrl(storage, photo.s3_key_thumb),
-        previewUrl: await getDownloadUrl(storage, photo.s3_key_preview),
+        thumbUrl:
+          getStorageCdnUrl(photo.s3_key_thumb) ??
+          (await getDownloadUrl(storage, photo.s3_key_thumb)),
+        previewUrl:
+          getStorageCdnUrl(photo.s3_key_preview) ??
+          (await getDownloadUrl(storage, photo.s3_key_preview)),
         sizeBytes: photo.size_bytes,
         width: photo.width,
         height: photo.height,
@@ -84,6 +89,7 @@ export async function GET(request: NextRequest) {
         device: photo.device || "Unknown",
         location: photo.location || "Unknown",
         backedUp: photo.backed_up,
+        processingStatus: photo.processing_status ?? "completed",
       }))
     );
 
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
       s3KeyOriginal,
       s3KeyPreview,
       s3KeyThumb,
+      processingStatus,
     } = body;
 
     // Validate required fields
@@ -153,6 +160,7 @@ export async function POST(request: NextRequest) {
         s3_key_original: s3KeyOriginal,
         s3_key_preview: s3KeyPreview,
         s3_key_thumb: s3KeyThumb,
+        processing_status: processingStatus ?? "completed",
       })
       .select()
       .single();

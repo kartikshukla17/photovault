@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS photos (
     s3_key_original TEXT NOT NULL,
     s3_key_preview TEXT NOT NULL,
     s3_key_thumb TEXT NOT NULL,
+    processing_status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

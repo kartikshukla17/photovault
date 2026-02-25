@@ -90,6 +90,14 @@ export function PhotoThumb({
           </span>
         </>
       )}
+
+      {photo.processingStatus !== "completed" && (
+        <span
+          className="absolute left-[6px] bottom-[6px] rounded-[6px] bg-black/70 px-[6px] py-[2px] text-[9px] text-white uppercase tracking-[0.4px]"
+        >
+          Processing
+        </span>
+      )}
     </button>
   );
 }

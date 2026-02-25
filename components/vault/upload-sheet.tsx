@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { IconTrash } from "./icons";
 import { useUploadSheet } from "./use-upload-sheet";
-import { createImageVariants } from "@/lib/image/variants";
+import { getImageMetadata } from "@/lib/image/metadata";
 
 interface SelectedFile {
   file: File;
@@ -16,15 +16,20 @@ interface SelectedFile {
   progress: number;
   status: "pending" | "uploading" | "done" | "error";
   error?: string;
+  metadata?: {
+    width: number;
+    height: number;
+  };
 }
 
 interface UploadInfo {
   photoId: string;
   filename: string;
-  uploadUrls: {
+  uploadUrl: string;
+  uploadUrls?: {
     original: string;
-    preview: string;
-    thumb: string;
+    preview?: string;
+    thumb?: string;
   };
   keys: {
     original: string;
@@ -121,6 +126,7 @@ export function UploadSheet() {
               contentType: f.file.type,
               size: f.file.size,
             })),
+            serverSideProcessing: true,
           }),
         });
 
@@ -144,58 +150,29 @@ export function UploadSheet() {
           });
 
           try {
-            // Generate optimized preview/thumb in the browser
+            const metadata = await getImageMetadata(file.file);
             setFiles((prev) => {
               const updated = [...prev];
-              updated[i] = { ...updated[i], progress: 12 };
+              updated[i] = { ...updated[i], metadata, progress: 25 };
               return updated;
             });
 
-            const variants = await createImageVariants(file.file);
-
-            setFiles((prev) => {
-              const updated = [...prev];
-              updated[i] = { ...updated[i], progress: 28 };
-              return updated;
-            });
-
-            // Upload original
-            const uploadOriginalRes = await fetch(uploadInfo.uploadUrls.original, {
+            const uploadOriginalRes = await fetch(uploadInfo.uploadUrl, {
               method: "PUT",
-              body: variants.original,
-              headers: { "Content-Type": variants.original.type },
+              body: file.file,
+              headers: {
+                "Content-Type": file.file.type || "application/octet-stream",
+                "x-amz-storage-class": "GLACIER_IR",
+              },
             });
             if (!uploadOriginalRes.ok) throw new Error("S3 original upload failed");
 
             setFiles((prev) => {
               const updated = [...prev];
-              updated[i] = { ...updated[i], progress: 56 };
+              updated[i] = { ...updated[i], progress: 75 };
               return updated;
             });
 
-            // Upload preview (1600px webp)
-            const uploadPreviewRes = await fetch(uploadInfo.uploadUrls.preview, {
-              method: "PUT",
-              body: variants.preview,
-              headers: { "Content-Type": "image/webp" },
-            });
-            if (!uploadPreviewRes.ok) throw new Error("S3 preview upload failed");
-
-            setFiles((prev) => {
-              const updated = [...prev];
-              updated[i] = { ...updated[i], progress: 78 };
-              return updated;
-            });
-
-            // Upload thumb (150px webp)
-            const uploadThumbRes = await fetch(uploadInfo.uploadUrls.thumb, {
-              method: "PUT",
-              body: variants.thumb,
-              headers: { "Content-Type": "image/webp" },
-            });
-            if (!uploadThumbRes.ok) throw new Error("S3 thumbnail upload failed");
-
-            // 3. Create photo record in Supabase
             const photoRes = await fetch("/api/photos", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -203,12 +180,13 @@ export function UploadSheet() {
                 id: uploadInfo.photoId,
                 filename: file.file.name,
                 sizeBytes: file.file.size,
-                width: variants.meta.width,
-                height: variants.meta.height,
+                width: metadata.width,
+                height: metadata.height,
                 takenAt: new Date().toISOString(),
                 s3KeyOriginal: uploadInfo.keys.original,
                 s3KeyPreview: uploadInfo.keys.preview,
                 s3KeyThumb: uploadInfo.keys.thumb,
+                processingStatus: "pending",
               }),
             });
 

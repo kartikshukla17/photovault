@@ -11,6 +11,7 @@ export type VaultPhoto = {
   width: number;
   height: number;
   backedUp: boolean;
+  processingStatus: string;
 };
 
 export type VaultAlbum = {
