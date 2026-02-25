@@ -26,6 +26,7 @@ export interface Database {
           s3_key_thumb: string;
           created_at: string;
           updated_at: string;
+          processing_status: string;
         };
         Insert: {
           id?: string;
@@ -43,6 +44,7 @@ export interface Database {
           s3_key_thumb: string;
           created_at?: string;
           updated_at?: string;
+          processing_status?: string | null;
         };
         Update: {
           id?: string;
@@ -60,6 +62,7 @@ export interface Database {
           s3_key_thumb?: string;
           created_at?: string;
           updated_at?: string;
+          processing_status?: string | null;
         };
       };
       albums: {

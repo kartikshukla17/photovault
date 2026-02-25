@@ -28,8 +28,9 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse request body
     const body = await request.json();
-    const { files } = body as {
+    const { files, serverSideProcessing } = body as {
       files: Array<{ filename: string; contentType: string; size: number }>;
+      serverSideProcessing?: boolean;
     };
 
     if (!files || !Array.isArray(files) || files.length === 0) {
@@ -74,15 +75,27 @@ export async function POST(request: NextRequest) {
         const photoId = randomUUID();
         const keys = generatePhotoKeys(user.id, photoId, file.filename);
 
-        const uploadUrls = {
-          original: await getUploadUrl(storage, keys.original, file.contentType),
-          preview: await getUploadUrl(storage, keys.preview, "image/webp"),
-          thumb: await getUploadUrl(storage, keys.thumb, "image/webp"),
+        const uploadUrls: {
+          original: string;
+          preview?: string;
+          thumb?: string;
+        } = {
+          original: await getUploadUrl(
+            storage,
+            keys.original,
+            file.contentType,
+            "GLACIER_IR",
+          ),
         };
+        if (!serverSideProcessing) {
+          uploadUrls.preview = await getUploadUrl(storage, keys.preview, "image/webp");
+          uploadUrls.thumb = await getUploadUrl(storage, keys.thumb, "image/webp");
+        }
 
         return {
           photoId,
           filename: file.filename,
+          uploadUrl: uploadUrls.original,
           uploadUrls,
           keys,
         };

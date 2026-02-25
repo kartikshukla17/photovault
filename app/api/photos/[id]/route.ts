@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDownloadUrl, deletePhotoObjects } from "@/lib/s3/client";
+import { getStorageCdnUrl } from "@/lib/storage/cdn";
 import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
 
 /**
@@ -47,11 +48,13 @@ export async function GET(
     }
 
     // Generate signed URLs
+    const cdnThumb = getStorageCdnUrl(photo.s3_key_thumb);
+    const cdnPreview = getStorageCdnUrl(photo.s3_key_preview);
     const photoWithUrls = {
       id: photo.id,
       filename: photo.filename,
-      thumbUrl: await getDownloadUrl(storage, photo.s3_key_thumb),
-      previewUrl: await getDownloadUrl(storage, photo.s3_key_preview),
+      thumbUrl: cdnThumb ?? (await getDownloadUrl(storage, photo.s3_key_thumb)),
+      previewUrl: cdnPreview ?? (await getDownloadUrl(storage, photo.s3_key_preview)),
       originalUrl: await getDownloadUrl(storage, photo.s3_key_original),
       sizeBytes: photo.size_bytes,
       width: photo.width,
@@ -60,6 +63,7 @@ export async function GET(
       device: photo.device || "Unknown",
       location: photo.location || "Unknown",
       backedUp: photo.backed_up,
+      processingStatus: photo.processing_status ?? "completed",
     };
 
     return NextResponse.json({ photo: photoWithUrls });

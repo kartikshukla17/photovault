@@ -17,6 +17,7 @@ type PhotoApiResponse = {
     thumbUrl?: string;
     previewUrl?: string;
     originalUrl?: string;
+    processingStatus?: string;
   }>;
 };
 
@@ -65,6 +66,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         thumbUrl: p.thumbUrl ?? "",
         previewUrl: p.previewUrl ?? "",
         originalUrl: p.originalUrl ?? "",
+        processingStatus: p.processingStatus ?? "completed",
       }));
       setPhotos(fetched);
     } catch (error) {
