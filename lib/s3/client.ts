@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   PutObjectCommandInput,
+  StorageClass,
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -37,7 +38,7 @@ export async function getUploadUrl(
   conn: S3Connection,
   key: string,
   contentType: string,
-  storageClass?: string,
+  storageClass?: StorageClass,
 ): Promise<string> {
   const s3Client = createS3Client(conn);
   const params: PutObjectCommandInput = {
