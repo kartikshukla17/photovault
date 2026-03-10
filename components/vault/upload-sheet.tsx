@@ -330,11 +330,11 @@ export function UploadSheet() {
   const handleFileSelect = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
 
-    const imageFiles = Array.from(selectedFiles).filter((f) =>
-      f.type.startsWith("image/")
+    const mediaFiles = Array.from(selectedFiles).filter((f) =>
+      f.type.startsWith("image/") || f.type.startsWith("video/")
     );
 
-    const newFiles: SelectedFile[] = imageFiles.map((file) => ({
+    const newFiles: SelectedFile[] = mediaFiles.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
       progress: 0,
@@ -417,7 +417,7 @@ export function UploadSheet() {
                 Drop photos here
               </div>
               <div className="text-text-muted text-[12px]">
-                JPEG · PNG · HEIC · WebP supported
+                Images & Videos · RAW · GIF · MP4 · MOV supported
               </div>
               <label
                 htmlFor="file-upload"
@@ -433,7 +433,7 @@ export function UploadSheet() {
               id="file-upload"
               type="file"
               multiple
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files)}
             />

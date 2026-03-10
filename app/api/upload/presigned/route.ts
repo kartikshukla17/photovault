@@ -41,8 +41,40 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Validate file types and sizes
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+    const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50MB for images
+    const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB for videos
+
+    const ALLOWED_IMAGE_TYPES = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+      "image/gif",
+      "image/tiff",
+      // RAW formats
+      "image/x-canon-cr2",
+      "image/x-canon-cr3",
+      "image/x-nikon-nef",
+      "image/x-sony-arw",
+      "image/x-adobe-dng",
+      "image/x-panasonic-rw2",
+      "image/x-fuji-raf",
+      "image/x-olympus-orf",
+      "image/x-pentax-pef",
+    ];
+
+    const ALLOWED_VIDEO_TYPES = [
+      "video/mp4",
+      "video/quicktime",  // .mov
+      "video/x-msvideo",  // .avi
+      "video/webm",
+      "video/x-matroska", // .mkv
+      "video/3gpp",       // .3gp
+    ];
+
+    const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
+    const isVideo = (type: string) => ALLOWED_VIDEO_TYPES.includes(type);
 
     for (const file of files) {
       if (!ALLOWED_TYPES.includes(file.contentType)) {
@@ -51,9 +83,10 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (file.size > MAX_FILE_SIZE) {
+      const maxSize = isVideo(file.contentType) ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      if (file.size > maxSize) {
         return NextResponse.json(
-          { error: `File too large: ${file.filename}` },
+          { error: `File too large: ${file.filename} (max ${isVideo(file.contentType) ? "500MB" : "50MB"})` },
           { status: 400 }
         );
       }
