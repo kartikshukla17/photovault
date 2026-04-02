@@ -62,18 +62,36 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 
   const fetchPhotos = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/photos");
-      if (!res.ok) throw new Error("Failed to load photos");
-      const data = (await res.json()) as PhotoApiResponse;
-      const fetched = (data.photos || []).map((p) => ({
-        ...p,
-        takenAt: new Date(p.takenAt),
-        thumbUrl: p.thumbUrl ?? "",
-        previewUrl: p.previewUrl ?? "",
-        originalUrl: p.originalUrl ?? "",
-        processingStatus: p.processingStatus ?? "completed",
-      }));
-      setPhotos(fetched);
+      const BATCH_SIZE = 100;
+      let offset = 0;
+      let allPhotos: VaultPhoto[] = [];
+      let hasMore = true;
+
+      // Fetch all photos in batches
+      while (hasMore) {
+        const res = await fetch(`/api/photos?limit=${BATCH_SIZE}&offset=${offset}`);
+        if (!res.ok) throw new Error("Failed to load photos");
+        const data = (await res.json()) as PhotoApiResponse;
+        const batch = (data.photos || []).map((p) => ({
+          ...p,
+          takenAt: new Date(p.takenAt),
+          thumbUrl: p.thumbUrl ?? "",
+          previewUrl: p.previewUrl ?? "",
+          originalUrl: p.originalUrl ?? "",
+          processingStatus: p.processingStatus ?? "completed",
+        }));
+
+        allPhotos = [...allPhotos, ...batch];
+
+        // If we got fewer than BATCH_SIZE, we've reached the end
+        if (batch.length < BATCH_SIZE) {
+          hasMore = false;
+        } else {
+          offset += BATCH_SIZE;
+        }
+      }
+
+      setPhotos(allPhotos);
     } catch (error) {
       console.error("Error fetching photos:", error);
     }

@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Virtuoso } from "react-virtuoso";
 
-import { Button } from "@/components/ui/button";
 import { PhotoThumb } from "@/components/vault/gallery/photo-thumb";
 import { PhotoViewer } from "@/components/vault/gallery/photo-viewer";
 import { SelectionToolbar } from "@/components/vault/gallery/selection-toolbar";
@@ -14,6 +14,7 @@ import { groupPhotosByMonth } from "@/lib/vault/group-by-month";
 import { useVault } from "@/lib/vault/vault-context";
 import { AddToAlbumModal } from "@/components/vault/add-to-album-modal";
 import { ConfirmModal } from "@/components/vault/confirm-modal";
+import type { VaultPhoto } from "@/lib/vault/types";
 
 export default function GalleryClient() {
   const { openSheet } = useUploadSheet();
@@ -25,10 +26,10 @@ export default function GalleryClient() {
   const [query, setQuery] = React.useState("");
   const [selectMode, setSelectMode] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set());
-  const [visibleCount, setVisibleCount] = React.useState(48);
   const [showAddToAlbum, setShowAddToAlbum] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [photoToDelete, setPhotoToDelete] = React.useState<string | null>(null);
+  const [columnsPerRow, setColumnsPerRow] = React.useState(4);
 
   const photoId = params.get("photo");
   const infoMode = params.get("info") === "1";
@@ -55,8 +56,50 @@ export default function GalleryClient() {
     );
   }, [filteredByAlbum, query]);
 
-  const visible = filtered.slice(0, visibleCount);
-  const groups = groupPhotosByMonth(visible);
+  const groups = groupPhotosByMonth(filtered);
+
+  // Build virtualized rows: headers + photo rows
+  type VirtualRow =
+    | { type: "header"; key: string; label: string; count: number }
+    | { type: "photos"; key: string; photos: VaultPhoto[] };
+
+  const virtualRows = React.useMemo(() => {
+    const rows: VirtualRow[] = [];
+    for (const group of groups) {
+      rows.push({
+        type: "header",
+        key: `header-${group.key}`,
+        label: group.label,
+        count: group.photos.length,
+      });
+      // Split photos into rows based on columnsPerRow
+      for (let i = 0; i < group.photos.length; i += columnsPerRow) {
+        rows.push({
+          type: "photos",
+          key: `row-${group.key}-${i}`,
+          photos: group.photos.slice(i, i + columnsPerRow),
+        });
+      }
+    }
+    return rows;
+  }, [groups, columnsPerRow]);
+
+  // Update columns based on container width
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const updateColumns = () => {
+      if (!containerRef.current) return;
+      const width = containerRef.current.clientWidth - 52; // account for padding
+      if (width < 400) setColumnsPerRow(3);
+      else if (width < 600) setColumnsPerRow(4);
+      else if (width < 900) setColumnsPerRow(5);
+      else if (width < 1200) setColumnsPerRow(6);
+      else setColumnsPerRow(Math.floor(width / 160));
+    };
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
 
   const toggleSelected = (id: string) => {
     setSelected((prev) => {
@@ -281,7 +324,7 @@ export default function GalleryClient() {
       </header>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden flex flex-col">
         {/* Album Filter Pills */}
         <div className="px-4 md:px-[26px] pt-3 md:pt-[14px] pb-[2px] flex gap-2 md:gap-[7px] overflow-x-auto scrollbar-hide">
           {albumPills.map((album) => (
@@ -313,60 +356,61 @@ export default function GalleryClient() {
           </div>
         )}
 
-        {/* Photo Grid */}
-        {filtered.length === 0 ? (
-          <div className="px-4 md:px-[26px] py-[60px] md:py-[80px] text-center text-text-caption">
-            <div className="text-[40px] mb-[12px]">⌕</div>
-            <div className="text-[14px]">
-              {query
-                ? `No photos match "${query}"`
-                : currentAlbumId !== "all"
-                ? "No photos in this album"
-                : "No photos yet"}
+        {/* Photo Grid - Virtualized */}
+        <div ref={containerRef} className="flex-1 min-h-0">
+          {filtered.length === 0 ? (
+            <div className="px-4 md:px-[26px] py-[60px] md:py-[80px] text-center text-text-caption">
+              <div className="text-[40px] mb-[12px]">⌕</div>
+              <div className="text-[14px]">
+                {query
+                  ? `No photos match "${query}"`
+                  : currentAlbumId !== "all"
+                  ? "No photos in this album"
+                  : "No photos yet"}
+              </div>
             </div>
-          </div>
-        ) : (
-          groups.map((group) => (
-            <section key={group.key} className="pt-4 md:pt-[22px] px-2 md:px-[26px]">
-              <div className="flex items-baseline gap-[9px] mb-2 md:mb-[12px] px-2 md:px-0">
-                <div className="font-display text-[14px] md:text-[16px] text-text-primary tracking-[-0.2px]">
-                  {group.label}
-                </div>
-                <div className="text-[10px] md:text-[11px] text-text-caption">
-                  {group.photos.length} photos
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-[2px] md:gap-[3px]">
-                {group.photos.map((photo) => (
-                  <PhotoThumb
-                    key={photo.id}
-                    photo={photo}
-                    selectMode={selectMode}
-                    selected={selected.has(photo.id)}
-                    onToggleSelect={() => toggleSelected(photo.id)}
-                    onOpen={() => openViewer(photo.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))
-        )}
-
-        {/* Load More */}
-        {visibleCount < filtered.length && (
-          <div className="px-[26px] py-[40px]">
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() =>
-                setVisibleCount((v) => Math.min(v + 48, filtered.length))
-              }
-            >
-              Load more
-            </Button>
-          </div>
-        )}
+          ) : (
+            <Virtuoso
+              style={{ height: "100%" }}
+              totalCount={virtualRows.length}
+              overscan={200}
+              itemContent={(index) => {
+                const row = virtualRows[index];
+                if (row.type === "header") {
+                  return (
+                    <div className="flex items-baseline gap-[9px] pt-4 md:pt-[22px] mb-2 md:mb-[12px] px-4 md:px-[26px]">
+                      <div className="font-display text-[14px] md:text-[16px] text-text-primary tracking-[-0.2px]">
+                        {row.label}
+                      </div>
+                      <div className="text-[10px] md:text-[11px] text-text-caption">
+                        {row.count} photos
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    className="grid gap-[2px] md:gap-[3px] px-2 md:px-[26px]"
+                    style={{
+                      gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)`,
+                    }}
+                  >
+                    {row.photos.map((photo) => (
+                      <PhotoThumb
+                        key={photo.id}
+                        photo={photo}
+                        selectMode={selectMode}
+                        selected={selected.has(photo.id)}
+                        onToggleSelect={() => toggleSelected(photo.id)}
+                        onOpen={() => openViewer(photo.id)}
+                      />
+                    ))}
+                  </div>
+                );
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Photo Viewer */}

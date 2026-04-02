@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const albumId = searchParams.get("album");
-    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = parseInt(searchParams.get("limit") || "100", 10);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
