@@ -6,6 +6,13 @@ import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import type { VaultPhoto } from "@/lib/vault/types";
 
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".webm", ".mkv", ".3gp", ".m4v"];
+
+function isVideoFile(filename: string): boolean {
+  const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  return VIDEO_EXTENSIONS.includes(ext);
+}
+
 export function PhotoViewer({
   open,
   photos,
@@ -222,16 +229,30 @@ export function PhotoViewer({
           ‹
         </button>
 
-        {/* Main Image */}
-        <img
-          src={photo.previewUrl}
-          alt={photo.filename}
-          className={cn(
-            "max-w-[calc(100%-130px)] max-h-[calc(100vh-150px)]",
-            "object-contain rounded-[4px]",
-            "shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
-          )}
-        />
+        {/* Main Image or Video */}
+        {isVideoFile(photo.filename) ? (
+          <video
+            src={photo.originalUrl || photo.previewUrl}
+            controls
+            autoPlay
+            playsInline
+            className={cn(
+              "max-w-[calc(100%-130px)] max-h-[calc(100vh-150px)]",
+              "object-contain rounded-[4px]",
+              "shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+            )}
+          />
+        ) : (
+          <img
+            src={photo.previewUrl}
+            alt={photo.filename}
+            className={cn(
+              "max-w-[calc(100%-130px)] max-h-[calc(100vh-150px)]",
+              "object-contain rounded-[4px]",
+              "shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+            )}
+          />
+        )}
 
         {/* Next Button */}
         <button
@@ -269,7 +290,7 @@ export function PhotoViewer({
           {[
             ["Filename", photo.filename],
             ["File size", formatBytes(photo.sizeBytes)],
-            ["Dimensions", `${photo.width} × ${photo.height}`],
+            [isVideoFile(photo.filename) ? "Resolution" : "Dimensions", `${photo.width} × ${photo.height}`],
             [
               "Date taken",
               photo.takenAt.toLocaleDateString(undefined, {
@@ -280,8 +301,11 @@ export function PhotoViewer({
             ],
             ["Device", photo.device],
             ["Location", photo.location],
-            ["Storage tier", "AWS S3 · Original"],
-            ["Format", "JPEG · sRGB"],
+            ["Storage tier", "AWS S3 · Glacier IR"],
+            ["Format", isVideoFile(photo.filename)
+              ? `Video · ${photo.filename.slice(photo.filename.lastIndexOf(".") + 1).toUpperCase()}`
+              : "Image · " + photo.filename.slice(photo.filename.lastIndexOf(".") + 1).toUpperCase()
+            ],
           ].map(([k, v]) => (
             <div
               key={k}

@@ -8,8 +8,68 @@ import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { IconTrash } from "./icons";
 import { useUploadSheet } from "./use-upload-sheet";
-import { getImageMetadata } from "@/lib/image/metadata";
+import { getMediaMetadata, isVideoFile } from "@/lib/image/metadata";
 import { createImageVariants } from "@/lib/image/variants";
+
+function guessContentTypeFromFilename(filename: string): string | null {
+  const ext = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+      return "image/heic";
+    case "heif":
+      return "image/heif";
+    case "gif":
+      return "image/gif";
+    case "tif":
+    case "tiff":
+      return "image/tiff";
+    case "cr2":
+      return "image/x-canon-cr2";
+    case "cr3":
+      return "image/x-canon-cr3";
+    case "nef":
+      return "image/x-nikon-nef";
+    case "arw":
+      return "image/x-sony-arw";
+    case "dng":
+      return "image/x-adobe-dng";
+    case "rw2":
+      return "image/x-panasonic-rw2";
+    case "raf":
+      return "image/x-fuji-raf";
+    case "orf":
+      return "image/x-olympus-orf";
+    case "pef":
+      return "image/x-pentax-pef";
+    case "mp4":
+      return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    case "avi":
+      return "video/x-msvideo";
+    case "webm":
+      return "video/webm";
+    case "mkv":
+      return "video/x-matroska";
+    case "3gp":
+      return "video/3gpp";
+    case "m4v":
+      return "video/x-m4v";
+    default:
+      return null;
+  }
+}
+
+function getFileContentType(file: File): string | null {
+  return file.type || guessContentTypeFromFilename(file.name);
+}
 
 interface SelectedFile {
   file: File;
@@ -17,6 +77,7 @@ interface SelectedFile {
   progress: number;
   status: "pending" | "uploading" | "done" | "error";
   error?: string;
+  contentType: string;
   metadata?: {
     width: number;
     height: number;
@@ -106,6 +167,13 @@ export function UploadSheet() {
     }
   }, [open]);
 
+  // Auto-close if page loads with "done" state but no files (e.g., after refresh)
+  React.useEffect(() => {
+    if (open && step === "done" && files.length === 0) {
+      closeSheet();
+    }
+  }, [open, step, files.length, closeSheet]);
+
   // Trigger upload when step changes to uploading
   React.useEffect(() => {
     if (step !== "uploading" || uploadStartedRef.current) return;
@@ -128,7 +196,7 @@ export function UploadSheet() {
           body: JSON.stringify({
             files: currentFiles.map((f) => ({
               filename: f.file.name,
-              contentType: f.file.type,
+              contentType: f.contentType,
               size: f.file.size,
             })),
             serverSideProcessing,
@@ -155,7 +223,8 @@ export function UploadSheet() {
           });
 
           try {
-            const metadata = await getImageMetadata(file.file);
+            const isVideo = isVideoFile(file.file);
+            const metadata = await getMediaMetadata(file.file);
             setFiles((prev) => {
               const updated = [...prev];
               updated[i] = { ...updated[i], metadata, progress: 25 };
@@ -168,7 +237,8 @@ export function UploadSheet() {
                   thumb: Blob;
                 }
               | undefined;
-            if (!serverSideProcessing) {
+            // Skip client-side variant creation for videos (requires server-side processing)
+            if (!serverSideProcessing && !isVideo) {
               const v = await createImageVariants(file.file);
               variants = { preview: v.preview, thumb: v.thumb };
               setFiles((prev) => {
@@ -182,7 +252,7 @@ export function UploadSheet() {
               method: "PUT",
               body: file.file,
               headers: {
-                "Content-Type": file.file.type || "application/octet-stream",
+                "Content-Type": file.contentType || "application/octet-stream",
               },
             });
             if (!uploadOriginalRes.ok) {
@@ -197,16 +267,14 @@ export function UploadSheet() {
               return updated;
             });
 
-            if (!serverSideProcessing) {
+            // Upload preview/thumb variants (skip for videos - they need server-side processing)
+            if (!serverSideProcessing && !isVideo && variants) {
               const previewUrl = uploadInfo.uploadUrls?.preview;
               const thumbUrl = uploadInfo.uploadUrls?.thumb;
               if (!previewUrl || !thumbUrl) {
                 throw new Error(
                   "Missing S3 upload URLs for preview/thumb. Re-try upload or enable server-side processing."
                 );
-              }
-              if (!variants) {
-                throw new Error("Missing preview/thumb variants");
               }
 
               const [uploadPreviewRes, uploadThumbRes] = await Promise.all([
@@ -244,6 +312,9 @@ export function UploadSheet() {
               });
             }
 
+            // Videos always need server-side processing for thumbnails
+            const needsProcessing = serverSideProcessing || isVideo;
+
             const photoRes = await fetch("/api/photos", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -257,7 +328,7 @@ export function UploadSheet() {
                 s3KeyOriginal: uploadInfo.keys.original,
                 s3KeyPreview: uploadInfo.keys.preview,
                 s3KeyThumb: uploadInfo.keys.thumb,
-                processingStatus: serverSideProcessing ? "pending" : "completed",
+                processingStatus: needsProcessing ? "pending" : "completed",
               }),
             });
 
@@ -330,12 +401,13 @@ export function UploadSheet() {
   const handleFileSelect = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
 
-    const mediaFiles = Array.from(selectedFiles).filter((f) =>
-      f.type.startsWith("image/") || f.type.startsWith("video/")
-    );
+    const mediaFiles = Array.from(selectedFiles)
+      .map((file) => ({ file, contentType: getFileContentType(file) }))
+      .filter(({ contentType }) => Boolean(contentType));
 
-    const newFiles: SelectedFile[] = mediaFiles.map((file) => ({
+    const newFiles: SelectedFile[] = mediaFiles.map(({ file, contentType }) => ({
       file,
+      contentType: contentType!,
       preview: URL.createObjectURL(file),
       progress: 0,
       status: "pending",
@@ -451,7 +523,9 @@ export function UploadSheet() {
                       className="flex items-center gap-[10px] p-[8px_12px] bg-[#141414] rounded-[8px] border border-bg-border"
                     >
                       <div className="relative w-[30px] h-[30px] bg-[#1e1e1e] rounded-[6px] flex items-center justify-center text-[13px] overflow-hidden flex-shrink-0">
-                        {f.preview ? (
+                        {f.contentType.startsWith("video/") ? (
+                          <span title="Video">🎬</span>
+                        ) : f.preview ? (
                           <Image
                             src={f.preview}
                             alt=""

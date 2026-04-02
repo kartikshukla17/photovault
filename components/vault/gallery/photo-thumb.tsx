@@ -1,7 +1,15 @@
 "use client";
 
+import * as React from "react";
 import type { VaultPhoto } from "@/lib/vault/types";
 import { cn } from "@/lib/cn";
+
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".webm", ".mkv", ".3gp", ".m4v"];
+
+function isVideoFile(filename: string): boolean {
+  const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  return VIDEO_EXTENSIONS.includes(ext);
+}
 
 export function PhotoThumb({
   photo,
@@ -16,6 +24,9 @@ export function PhotoThumb({
   onToggleSelect: () => void;
   onOpen: () => void;
 }) {
+  const [imgError, setImgError] = React.useState(false);
+  const isVideo = isVideoFile(photo.filename);
+
   return (
     <button
       type="button"
@@ -27,13 +38,20 @@ export function PhotoThumb({
       onClick={selectMode ? onToggleSelect : onOpen}
       aria-label={photo.filename}
     >
-      <img
-        src={photo.thumbUrl}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className="h-full w-full object-cover"
-      />
+      {imgError || (isVideo && photo.processingStatus !== "completed") ? (
+        <div className="h-full w-full bg-[#1a1a1a] flex items-center justify-center text-[24px]">
+          {isVideo ? "🎬" : "🖼"}
+        </div>
+      ) : (
+        <img
+          src={photo.thumbUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      )}
 
       {/* Hover overlay with location */}
       <div
@@ -96,6 +114,20 @@ export function PhotoThumb({
           className="absolute left-[6px] bottom-[6px] rounded-[6px] bg-black/70 px-[6px] py-[2px] text-[9px] text-white uppercase tracking-[0.4px]"
         >
           Processing
+        </span>
+      )}
+
+      {/* Video indicator */}
+      {isVideoFile(photo.filename) && (
+        <span
+          className={cn(
+            "absolute left-[6px] top-[6px]",
+            "flex h-[22px] w-[22px] items-center justify-center rounded-full",
+            "bg-black/60 text-white text-[10px]"
+          )}
+          aria-label="Video"
+        >
+          ▶
         </span>
       )}
     </button>

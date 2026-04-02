@@ -84,6 +84,9 @@ export async function GET(request: NextRequest) {
         previewUrl: useProxy
           ? `/api/photos/${photo.id}/blob/preview`
           : await getStorageViewUrl(storage, photo.s3_key_preview),
+        originalUrl: useProxy
+          ? `/api/photos/${photo.id}/blob/original`
+          : await getStorageViewUrl(storage, photo.s3_key_original),
         sizeBytes: photo.size_bytes,
         width: photo.width,
         height: photo.height,

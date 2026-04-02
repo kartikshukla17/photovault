@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
       "video/webm",
       "video/x-matroska", // .mkv
       "video/3gpp",       // .3gp
+      "video/x-m4v",      // .m4v
     ];
 
     const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
@@ -117,7 +118,6 @@ export async function POST(request: NextRequest) {
             storage,
             keys.original,
             file.contentType,
-            "GLACIER_IR",
           ),
         };
         if (!serverSideProcessing) {
