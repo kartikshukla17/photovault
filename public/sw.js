@@ -3,7 +3,7 @@
  * - Runtime caching for images (thumb/preview/original)
  */
 
-const VERSION = "pv-sw-v1";
+const VERSION = "pv-sw-v2";
 const APP_CACHE = `${VERSION}:app`;
 const IMG_CACHE = `${VERSION}:img`;
 
@@ -43,9 +43,44 @@ async function limitCacheEntries(cacheName, maxEntries) {
   }
 }
 
+/* ── Share Target handler ── */
+const SHARE_CACHE = "pv-share-target";
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
+
+  // Intercept the Web Share Target POST
+  if (req.method === "POST" && url.pathname === "/share-target") {
+    event.respondWith(
+      (async () => {
+        const formData = await req.formData();
+        const files = formData.getAll("media");
+        const cache = await caches.open(SHARE_CACHE);
+        // Store each shared file with a numbered key
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const resp = new Response(file, {
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+              "X-Filename": file.name || `shared-${i}`,
+            },
+          });
+          await cache.put(`/share-target/file/${i}`, resp);
+        }
+        // Store file count
+        await cache.put(
+          "/share-target/meta",
+          new Response(JSON.stringify({ count: files.length }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+        // Redirect to the share target page (GET)
+        return Response.redirect(`${url.origin}/share-target`, 303);
+      })(),
+    );
+    return;
+  }
 
   if (req.method !== "GET") return;
   if (url.pathname.startsWith("/api/")) return;

@@ -20,6 +20,23 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "maskable",
       },
     ],
-  };
+    // Web Share Target API — allows receiving photos from the native share sheet
+    share_target: {
+      action: "/share-target",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+        files: [
+          {
+            name: "media",
+            accept: ["image/*", "video/*"],
+          },
+        ],
+      },
+    },
+  } as MetadataRoute.Manifest & { share_target: unknown };
 }
 
