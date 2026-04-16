@@ -84,6 +84,18 @@ export default function ShareUploadClient() {
 
   // Load shared files from service worker cache + fetch albums
   React.useEffect(() => {
+    const shareError = searchParams.get("share_error");
+    if (shareError) {
+      const message =
+        shareError === "quota"
+          ? "This file is too large for your device storage. Free up space or open the app and upload it directly."
+          : "The share couldn't be processed by the app. Open Photo Vault and upload the file directly.";
+      setErrorMsg(message);
+      setStep("error");
+      setLoading(false);
+      return;
+    }
+
     Promise.all([loadSharedFiles(), fetch("/api/albums").then((r) => r.json())])
       .then(([files, albumData]) => {
         if (files.length === 0) {
