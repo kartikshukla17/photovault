@@ -238,7 +238,12 @@ export default function GalleryClient() {
               {selectMode ? `✓ ${selected.size}` : "Select"}
             </button>
             <button
-              onClick={() => openSheet("idle")}
+              onClick={() =>
+                openSheet(
+                  "idle",
+                  albumParam && albumParam !== "all" ? { albumId: albumParam } : undefined,
+                )
+              }
               className={cn(
                 "p-2 rounded-lg",
                 "bg-[linear-gradient(135deg,#c8a97e,#9a6835)]",
