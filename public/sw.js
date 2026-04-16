@@ -3,7 +3,7 @@
  * - Runtime caching for images (thumb/preview/original)
  */
 
-const VERSION = "pv-sw-v2";
+const VERSION = "pv-sw-v3";
 const APP_CACHE = `${VERSION}:app`;
 const IMG_CACHE = `${VERSION}:img`;
 
@@ -75,8 +75,9 @@ self.addEventListener("fetch", (event) => {
             headers: { "Content-Type": "application/json" },
           }),
         );
-        // Redirect to the share target page (GET)
-        return Response.redirect(`${url.origin}/share-target`, 303);
+        // Redirect to the React upload page (GET). The route handler at
+        // /share-target is reserved for the server-side fallback POST.
+        return Response.redirect(`${url.origin}/share-upload`, 303);
       })(),
     );
     return;

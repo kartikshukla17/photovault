@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
@@ -70,8 +70,9 @@ async function loadSharedFiles(): Promise<File[]> {
 
 /* ── Component ── */
 
-export default function ShareTargetClient() {
+export default function ShareUploadClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sharedFiles, setSharedFiles] = React.useState<SharedFile[]>([]);
   const [albums, setAlbums] = React.useState<Album[]>([]);
   const [selectedAlbum, setSelectedAlbum] = React.useState<string | null>(null);
@@ -86,6 +87,13 @@ export default function ShareTargetClient() {
     Promise.all([loadSharedFiles(), fetch("/api/albums").then((r) => r.json())])
       .then(([files, albumData]) => {
         if (files.length === 0) {
+          // If the server fallback uploaded files directly, it redirects here
+          // with ?share_uploaded=N. Forward to the gallery in that case.
+          const uploaded = searchParams.get("share_uploaded");
+          if (uploaded) {
+            router.replace(`/gallery?share_uploaded=${uploaded}`);
+            return;
+          }
           router.replace("/gallery");
           return;
         }
@@ -98,7 +106,7 @@ export default function ShareTargetClient() {
       .catch(() => {
         router.replace("/gallery");
       });
-  }, [router]);
+  }, [router, searchParams]);
 
   // Cleanup previews on unmount
   React.useEffect(() => {

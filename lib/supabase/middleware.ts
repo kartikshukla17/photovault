@@ -49,7 +49,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/gallery") ||
     request.nextUrl.pathname.startsWith("/albums") ||
     request.nextUrl.pathname.startsWith("/backup") ||
-    request.nextUrl.pathname.startsWith("/settings");
+    request.nextUrl.pathname.startsWith("/settings") ||
+    request.nextUrl.pathname.startsWith("/share-upload");
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith("/login") ||
