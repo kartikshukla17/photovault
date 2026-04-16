@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
 
     // 3. Validate file types and sizes
     const MAX_IMAGE_SIZE = 50 * 1024 * 1024; // 50MB for images
-    const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB for videos
+    // S3 single-PUT max is 5GB; cap just under that so presigned PUTs succeed.
+    const MAX_VIDEO_SIZE = 5 * 1024 * 1024 * 1024 - 1; // ~5GB for videos
 
     const ALLOWED_IMAGE_TYPES = [
       "image/jpeg",
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
       const maxSize = isVideo(file.contentType) ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
       if (file.size > maxSize) {
         return NextResponse.json(
-          { error: `File too large: ${file.filename} (max ${isVideo(file.contentType) ? "500MB" : "50MB"})` },
+          { error: `File too large: ${file.filename} (max ${isVideo(file.contentType) ? "5GB" : "50MB"})` },
           { status: 400 }
         );
       }
