@@ -10,6 +10,7 @@ import { IconTrash } from "./icons";
 import { useUploadSheet } from "./use-upload-sheet";
 import { getMediaMetadata, isVideoFile } from "@/lib/image/metadata";
 import { createImageVariants } from "@/lib/image/variants";
+import { useVault } from "@/lib/vault/vault-context";
 
 function guessContentTypeFromFilename(filename: string): string | null {
   const ext = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
@@ -147,8 +148,12 @@ function UploadModal({
 
 export function UploadSheet() {
   const { open, step, closeSheet, setStep, albumId } = useUploadSheet();
+  const vault = useVault();
   const [files, setFiles] = React.useState<SelectedFile[]>([]);
   const [dragging, setDragging] = React.useState(false);
+  const [duplicatePrompt, setDuplicatePrompt] = React.useState<{
+    duplicateIndices: number[];
+  } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const filesAppInputRef = React.useRef<HTMLInputElement>(null);
   const uploadStartedRef = React.useRef(false);
@@ -164,6 +169,7 @@ export function UploadSheet() {
   React.useEffect(() => {
     if (!open) {
       setFiles([]);
+      setDuplicatePrompt(null);
       uploadStartedRef.current = false;
     }
   }, [open]);
@@ -458,9 +464,54 @@ export function UploadSheet() {
     });
   };
 
+  const findDuplicateIndices = React.useCallback(
+    (list: SelectedFile[]) => {
+      const existing = new Set(
+        vault.photos.map((p) => `${p.filename}::${p.sizeBytes}`),
+      );
+      const dupes: number[] = [];
+      list.forEach((f, i) => {
+        if (existing.has(`${f.file.name}::${f.file.size}`)) dupes.push(i);
+      });
+      return dupes;
+    },
+    [vault.photos],
+  );
+
   const handleStartUpload = () => {
     if (files.length === 0) return;
+    const dupes = findDuplicateIndices(files);
+    if (dupes.length > 0) {
+      setDuplicatePrompt({ duplicateIndices: dupes });
+      return;
+    }
     setStep("uploading");
+  };
+
+  const handleSkipDuplicates = () => {
+    if (!duplicatePrompt) return;
+    const skip = new Set(duplicatePrompt.duplicateIndices);
+    const remaining: SelectedFile[] = [];
+    files.forEach((f, i) => {
+      if (skip.has(i)) {
+        URL.revokeObjectURL(f.preview);
+      } else {
+        remaining.push(f);
+      }
+    });
+    setFiles(remaining);
+    setDuplicatePrompt(null);
+    if (remaining.length === 0) return;
+    setStep("uploading");
+  };
+
+  const handleUploadAnyway = () => {
+    setDuplicatePrompt(null);
+    setStep("uploading");
+  };
+
+  const handleCancelDuplicatePrompt = () => {
+    setDuplicatePrompt(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -477,9 +528,64 @@ export function UploadSheet() {
 
   if (!open) return null;
 
+  const duplicateCount = duplicatePrompt?.duplicateIndices.length ?? 0;
+  const duplicateNames = duplicatePrompt
+    ? duplicatePrompt.duplicateIndices
+        .slice(0, 3)
+        .map((i) => files[i]?.file.name)
+        .filter(Boolean)
+    : [];
+
   return (
-    <UploadModal onClose={handleClose}>
-      {step === "idle" ? (
+    <UploadModal onClose={duplicatePrompt ? handleCancelDuplicatePrompt : handleClose}>
+      {duplicatePrompt ? (
+        <div>
+          <div className="px-[26px] py-[22px] border-b border-bg-border">
+            <div className="font-display text-[19px] text-text-primary tracking-[-0.3px]">
+              {duplicateCount} already in your vault
+            </div>
+            <div className="text-[11px] text-text-muted mt-[2px]">
+              A file with the same name and size is already backed up.
+            </div>
+          </div>
+          <div className="p-[24px]">
+            {duplicateNames.length > 0 && (
+              <ul className="mb-[14px] flex flex-col gap-[4px]">
+                {duplicateNames.map((name, i) => (
+                  <li
+                    key={i}
+                    className="text-[12px] text-text-secondary truncate bg-[#141414] border border-bg-border rounded-[8px] px-[10px] py-[7px]"
+                  >
+                    {name}
+                  </li>
+                ))}
+                {duplicateCount > duplicateNames.length && (
+                  <li className="text-[11px] text-text-muted">
+                    +{duplicateCount - duplicateNames.length} more
+                  </li>
+                )}
+              </ul>
+            )}
+            <div className="flex flex-col gap-[10px]">
+              <Button variant="primary" onClick={handleSkipDuplicates}>
+                Skip {duplicateCount} duplicate{duplicateCount > 1 ? "s" : ""}
+                {files.length - duplicateCount > 0
+                  ? ` · upload ${files.length - duplicateCount}`
+                  : ""}
+              </Button>
+              <Button variant="secondary" onClick={handleUploadAnyway}>
+                Upload all anyway
+              </Button>
+              <button
+                onClick={handleCancelDuplicatePrompt}
+                className="text-[12px] text-text-muted hover:text-text-secondary"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : step === "idle" ? (
         <div>
           {/* Header */}
           <div className="px-[26px] py-[22px] border-b border-bg-border flex justify-between items-start">
