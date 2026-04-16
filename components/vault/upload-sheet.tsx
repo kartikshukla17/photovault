@@ -150,6 +150,7 @@ export function UploadSheet() {
   const [files, setFiles] = React.useState<SelectedFile[]>([]);
   const [dragging, setDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const filesAppInputRef = React.useRef<HTMLInputElement>(null);
   const uploadStartedRef = React.useRef(false);
   const filesRef = React.useRef<SelectedFile[]>([]);
   const uploadedIdsRef = React.useRef<string[]>([]);
@@ -401,9 +402,23 @@ export function UploadSheet() {
   const handleFileSelect = (selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
 
+    // The "Files" picker uses no accept filter (so folder-based file managers
+    // open instead of just the gallery). Reject anything that isn't an image
+    // or video here so the user sees feedback immediately.
     const mediaFiles = Array.from(selectedFiles)
       .map((file) => ({ file, contentType: getFileContentType(file) }))
-      .filter(({ contentType }) => Boolean(contentType));
+      .filter(
+        ({ contentType }) =>
+          !!contentType &&
+          (contentType.startsWith("image/") || contentType.startsWith("video/")),
+      );
+
+    if (mediaFiles.length < selectedFiles.length) {
+      const skipped = selectedFiles.length - mediaFiles.length;
+      alert(
+        `${skipped} file${skipped > 1 ? "s were" : " was"} skipped — only images and videos can be uploaded.`,
+      );
+    }
 
     const newFiles: SelectedFile[] = mediaFiles.map(({ file, contentType }) => ({
       file,
@@ -491,13 +506,25 @@ export function UploadSheet() {
               <div className="text-text-muted text-[12px]">
                 Images & Videos · RAW · GIF · MP4 · MOV supported
               </div>
-              <label
-                htmlFor="file-upload"
-                className="inline-block mt-[14px] px-[18px] py-[7px] bg-[#181818] border border-[#2a2a2a] rounded-[8px] text-text-muted text-[12px] cursor-pointer hover:bg-[#1e1e1e]"
+              <div
+                className="mt-[14px] flex gap-[8px] justify-center"
                 onClick={(e) => e.stopPropagation()}
               >
-                Browse Files
-              </label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-[18px] py-[7px] bg-[#181818] border border-[#2a2a2a] rounded-[8px] text-text-muted text-[12px] cursor-pointer hover:bg-[#1e1e1e]"
+                >
+                  Photos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => filesAppInputRef.current?.click()}
+                  className="px-[18px] py-[7px] bg-[#181818] border border-[#2a2a2a] rounded-[8px] text-text-muted text-[12px] cursor-pointer hover:bg-[#1e1e1e]"
+                >
+                  Files
+                </button>
+              </div>
             </div>
 
             <input
@@ -506,6 +533,14 @@ export function UploadSheet() {
               type="file"
               multiple
               accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => handleFileSelect(e.target.files)}
+            />
+            <input
+              ref={filesAppInputRef}
+              id="file-upload-files-app"
+              type="file"
+              multiple
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files)}
             />
