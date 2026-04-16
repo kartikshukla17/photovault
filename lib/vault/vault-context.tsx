@@ -99,7 +99,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAlbums = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/albums");
+      const res = await fetch("/api/albums", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load albums");
       const data = await res.json();
       setAlbums([

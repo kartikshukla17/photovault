@@ -369,12 +369,30 @@ export function UploadSheet() {
         }
 
         if (albumId && uploadedIdsRef.current.length > 0) {
-          await fetch(`/api/albums/${albumId}`, {
+          const patchRes = await fetch(`/api/albums/${albumId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ addPhotoIds: uploadedIdsRef.current }),
           });
-          if (typeof window !== "undefined") {
+          if (!patchRes.ok) {
+            const payload = await patchRes.json().catch(() => ({}));
+            console.error("Failed to add photos to album:", payload);
+            // Surface the failure on the files so the user sees uploads
+            // succeeded but the album mapping didn't.
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.status === "done"
+                  ? {
+                      ...f,
+                      status: "error",
+                      error:
+                        payload.error ??
+                        "Uploaded, but couldn't add to the selected album.",
+                    }
+                  : f,
+              ),
+            );
+          } else if (typeof window !== "undefined") {
             window.dispatchEvent(
               new CustomEvent("pv:album-updated", { detail: { albumId } }),
             );

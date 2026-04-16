@@ -228,11 +228,17 @@ export default function ShareUploadClient() {
 
       // Add to album if selected
       if (selectedAlbum && uploadedIds.length > 0) {
-        await fetch(`/api/albums/${selectedAlbum}`, {
+        const patchRes = await fetch(`/api/albums/${selectedAlbum}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ addPhotoIds: uploadedIds }),
         });
+        if (!patchRes.ok) {
+          const payload = await patchRes.json().catch(() => ({}));
+          throw new Error(
+            payload.error ?? "Uploaded, but couldn't add photos to the album.",
+          );
+        }
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("pv:album-updated", { detail: { albumId: selectedAlbum } }),

@@ -111,14 +111,28 @@ export async function PATCH(
     if (addPhotoIds && Array.isArray(addPhotoIds) && addPhotoIds.length > 0) {
       // Verify all photos belong to the user
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: userPhotos } = await (supabase as any)
+      const { data: userPhotos, error: photoLookupError } = await (supabase as any)
         .from("photos")
         .select("id")
         .eq("user_id", user.id)
         .in("id", addPhotoIds);
 
+      if (photoLookupError) {
+        console.error("Error verifying photos for album mapping:", photoLookupError);
+        return NextResponse.json(
+          { error: "Failed to verify photos for album" },
+          { status: 500 },
+        );
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const validPhotoIds = userPhotos?.map((p: any) => p.id) || [];
+
+      if (validPhotoIds.length !== addPhotoIds.length) {
+        console.warn(
+          `Album ${id}: ${addPhotoIds.length - validPhotoIds.length} photo(s) missing or not owned by user, dropping`,
+        );
+      }
 
       if (validPhotoIds.length > 0) {
         // Insert album_photos (ignore duplicates)
@@ -135,6 +149,24 @@ export async function PATCH(
 
         if (insertError) {
           console.error("Error adding photos to album:", insertError);
+          const isProd = process.env.NODE_ENV === "production";
+          return NextResponse.json(
+            {
+              error: "Failed to add photos to album",
+              ...(isProd
+                ? null
+                : {
+                    details: {
+                      message: insertError.message,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      code: (insertError as any).code ?? null,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      hint: (insertError as any).hint ?? null,
+                    },
+                  }),
+            },
+            { status: 500 },
+          );
         }
       }
     }
