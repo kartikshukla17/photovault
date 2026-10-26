@@ -54,6 +54,11 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [albums, setAlbums] = React.useState<VaultAlbum[]>([]);
   const [selectedAlbum, setSelectedAlbum] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const photosRef = React.useRef<VaultPhoto[]>([]);
+
+  React.useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
 
   const fetchPhotos = React.useCallback(async () => {
     try {
@@ -79,11 +84,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/albums");
       if (!res.ok) throw new Error("Failed to load albums");
       const data = await res.json();
-      setAlbums([{ id: "all", name: "All Photos", photoIds: photos.map((p) => p.id) }, ...(data.albums || [])]);
+      setAlbums([
+        { id: "all", name: "All Photos", photoIds: photosRef.current.map((p) => p.id) },
+        ...(data.albums || []),
+      ]);
     } catch (error) {
       console.error("Error fetching albums:", error);
     }
-  }, [photos]);
+  }, []);
 
   // Fetch photos and albums from API on mount
   React.useEffect(() => {
@@ -98,11 +106,27 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchPhotos, fetchAlbums]);
 
+  // Keep the synthetic "All Photos" album in sync with the photo library without refetching.
+  React.useEffect(() => {
+    setAlbums((prev) => {
+      const allAlbum: VaultAlbum = {
+        id: "all",
+        name: "All Photos",
+        photoIds: photos.map((p) => p.id),
+      };
+      const rest = prev.filter((a) => a.id !== "all");
+      return [allAlbum, ...rest];
+    });
+  }, [photos]);
+
   React.useEffect(() => {
     const onPhotoAdded = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (!detail?.photo) return;
-      setPhotos((prev) => [detail.photo, ...prev]);
+      // The upload flow may dispatch a raw DB row (snake_case + taken_at string).
+      // Avoid inserting inconsistent shapes into state (can crash grouping/render).
+      // Instead, re-fetch the library which normalizes dates + signed URLs.
+      fetchPhotos();
     };
 
     const onAlbumUpdated = () => {
@@ -116,7 +140,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pv:photo-added", onPhotoAdded);
       window.removeEventListener("pv:album-updated", onAlbumUpdated);
     };
-  }, [fetchAlbums]);
+  }, [fetchAlbums, fetchPhotos]);
 
   const deletePhoto = React.useCallback(async (id: string) => {
     const response = await fetch(`/api/photos/${id}`, {

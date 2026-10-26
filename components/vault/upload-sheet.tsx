@@ -9,6 +9,7 @@ import { formatBytes } from "@/lib/format";
 import { IconTrash } from "./icons";
 import { useUploadSheet } from "./use-upload-sheet";
 import { getImageMetadata } from "@/lib/image/metadata";
+import { createImageVariants } from "@/lib/image/variants";
 
 interface SelectedFile {
   file: File;
@@ -116,6 +117,10 @@ export function UploadSheet() {
       uploadedIdsRef.current = [];
 
       try {
+        const serverSideProcessing =
+          (process.env.NEXT_PUBLIC_UPLOAD_SERVER_SIDE_PROCESSING ?? "false").toLowerCase() ===
+          "true";
+
         // 1. Get pre-signed URLs from API
         const presignedRes = await fetch("/api/upload/presigned", {
           method: "POST",
@@ -126,7 +131,7 @@ export function UploadSheet() {
               contentType: f.file.type,
               size: f.file.size,
             })),
-            serverSideProcessing: true,
+            serverSideProcessing,
           }),
         });
 
@@ -157,21 +162,87 @@ export function UploadSheet() {
               return updated;
             });
 
+            let variants:
+              | {
+                  preview: Blob;
+                  thumb: Blob;
+                }
+              | undefined;
+            if (!serverSideProcessing) {
+              const v = await createImageVariants(file.file);
+              variants = { preview: v.preview, thumb: v.thumb };
+              setFiles((prev) => {
+                const updated = [...prev];
+                updated[i] = { ...updated[i], progress: 40 };
+                return updated;
+              });
+            }
+
             const uploadOriginalRes = await fetch(uploadInfo.uploadUrl, {
               method: "PUT",
               body: file.file,
               headers: {
                 "Content-Type": file.file.type || "application/octet-stream",
-                "x-amz-storage-class": "GLACIER_IR",
               },
             });
-            if (!uploadOriginalRes.ok) throw new Error("S3 original upload failed");
+            if (!uploadOriginalRes.ok) {
+              const body = await uploadOriginalRes.text().catch(() => "");
+              const snippet = body ? `: ${body.slice(0, 240)}` : "";
+              throw new Error(`S3 original upload failed (${uploadOriginalRes.status})${snippet}`);
+            }
 
             setFiles((prev) => {
               const updated = [...prev];
-              updated[i] = { ...updated[i], progress: 75 };
+              updated[i] = { ...updated[i], progress: serverSideProcessing ? 75 : 55 };
               return updated;
             });
+
+            if (!serverSideProcessing) {
+              const previewUrl = uploadInfo.uploadUrls?.preview;
+              const thumbUrl = uploadInfo.uploadUrls?.thumb;
+              if (!previewUrl || !thumbUrl) {
+                throw new Error(
+                  "Missing S3 upload URLs for preview/thumb. Re-try upload or enable server-side processing."
+                );
+              }
+              if (!variants) {
+                throw new Error("Missing preview/thumb variants");
+              }
+
+              const [uploadPreviewRes, uploadThumbRes] = await Promise.all([
+                fetch(previewUrl, {
+                  method: "PUT",
+                  body: variants.preview,
+                  headers: { "Content-Type": "image/webp" },
+                }),
+                fetch(thumbUrl, {
+                  method: "PUT",
+                  body: variants.thumb,
+                  headers: { "Content-Type": "image/webp" },
+                }),
+              ]);
+
+              if (!uploadPreviewRes.ok) {
+                const body = await uploadPreviewRes.text().catch(() => "");
+                const snippet = body ? `: ${body.slice(0, 240)}` : "";
+                throw new Error(
+                  `S3 preview upload failed (${uploadPreviewRes.status})${snippet}`
+                );
+              }
+              if (!uploadThumbRes.ok) {
+                const body = await uploadThumbRes.text().catch(() => "");
+                const snippet = body ? `: ${body.slice(0, 240)}` : "";
+                throw new Error(
+                  `S3 thumb upload failed (${uploadThumbRes.status})${snippet}`
+                );
+              }
+
+              setFiles((prev) => {
+                const updated = [...prev];
+                updated[i] = { ...updated[i], progress: 75 };
+                return updated;
+              });
+            }
 
             const photoRes = await fetch("/api/photos", {
               method: "POST",
@@ -186,7 +257,7 @@ export function UploadSheet() {
                 s3KeyOriginal: uploadInfo.keys.original,
                 s3KeyPreview: uploadInfo.keys.preview,
                 s3KeyThumb: uploadInfo.keys.thumb,
-                processingStatus: "pending",
+                processingStatus: serverSideProcessing ? "pending" : "completed",
               }),
             });
 

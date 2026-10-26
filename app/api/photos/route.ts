@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getDownloadUrl } from "@/lib/s3/client";
 import { getUserStorageConfigOrThrow } from "@/lib/storage/user-storage";
-import { getStorageCdnUrl } from "@/lib/storage/cdn";
+import { getStorageViewUrl } from "@/lib/storage/object-url";
 
 /**
  * GET /api/photos
@@ -70,18 +69,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch photos" }, { status: 500 });
     }
 
+    const cdnMode = (process.env.NEXT_PUBLIC_STORAGE_CDN_MODE ?? "presigned").toLowerCase();
+    const useProxy = cdnMode === "proxy";
+
     // Generate signed URLs for each photo
     const photosWithUrls = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (photos || []).map(async (photo: any) => ({
         id: photo.id,
         filename: photo.filename,
-        thumbUrl:
-          getStorageCdnUrl(photo.s3_key_thumb) ??
-          (await getDownloadUrl(storage, photo.s3_key_thumb)),
-        previewUrl:
-          getStorageCdnUrl(photo.s3_key_preview) ??
-          (await getDownloadUrl(storage, photo.s3_key_preview)),
+        thumbUrl: useProxy
+          ? `/api/photos/${photo.id}/blob/thumb`
+          : await getStorageViewUrl(storage, photo.s3_key_thumb),
+        previewUrl: useProxy
+          ? `/api/photos/${photo.id}/blob/preview`
+          : await getStorageViewUrl(storage, photo.s3_key_preview),
         sizeBytes: photo.size_bytes,
         width: photo.width,
         height: photo.height,
@@ -139,35 +141,84 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the S3 keys belong to this user (security check)
-    if (!s3KeyOriginal.startsWith(`users/${user.id}/`)) {
+    const expectedPrefix = `users/${user.id}/photos/${id}/`;
+    if (
+      !s3KeyOriginal.startsWith(expectedPrefix) ||
+      !s3KeyPreview.startsWith(expectedPrefix) ||
+      !s3KeyThumb.startsWith(expectedPrefix)
+    ) {
       return NextResponse.json({ error: "Invalid S3 key" }, { status: 403 });
     }
 
+    const basePayload = {
+      id,
+      user_id: user.id,
+      filename,
+      size_bytes: sizeBytes || 0,
+      width: width || 0,
+      height: height || 0,
+      taken_at: takenAt || new Date().toISOString(),
+      device: device || null,
+      location: location || null,
+      backed_up: true,
+      s3_key_original: s3KeyOriginal,
+      s3_key_preview: s3KeyPreview,
+      s3_key_thumb: s3KeyThumb,
+    };
+
+    const payload =
+      processingStatus == null
+        ? basePayload
+        : { ...basePayload, processing_status: processingStatus ?? "completed" };
+
+    // Try insert with `processing_status`, but gracefully fallback if the user's schema
+    // doesn't have the column yet (or PostgREST schema cache hasn't refreshed).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: photo, error } = await (supabase as any)
+    let insertResult = await (supabase as any)
       .from("photos")
-      .insert({
-        id,
-        user_id: user.id,
-        filename,
-        size_bytes: sizeBytes || 0,
-        width: width || 0,
-        height: height || 0,
-        taken_at: takenAt || new Date().toISOString(),
-        device: device || null,
-        location: location || null,
-        backed_up: true,
-        s3_key_original: s3KeyOriginal,
-        s3_key_preview: s3KeyPreview,
-        s3_key_thumb: s3KeyThumb,
-        processing_status: processingStatus ?? "completed",
-      })
+      .insert(payload)
       .select()
       .single();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const firstError: any = insertResult.error;
+    if (
+      firstError?.code === "PGRST204" &&
+      typeof firstError?.message === "string" &&
+      firstError.message.includes("processing_status")
+    ) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      insertResult = await (supabase as any)
+        .from("photos")
+        .insert(basePayload)
+        .select()
+        .single();
+    }
+
+    const { data: photo, error } = insertResult;
+
     if (error) {
       console.error("Error creating photo:", error);
-      return NextResponse.json({ error: "Failed to create photo" }, { status: 500 });
+      const isProd = process.env.NODE_ENV === "production";
+      return NextResponse.json(
+        {
+          error: "Failed to create photo",
+          ...(isProd
+            ? null
+            : {
+                details: {
+                  message: error.message,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  code: (error as any).code ?? null,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  hint: (error as any).hint ?? null,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  details: (error as any).details ?? null,
+                },
+              }),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ photo }, { status: 201 });

@@ -4,6 +4,7 @@ import {
   PutObjectCommandInput,
   StorageClass,
   GetObjectCommand,
+  GetObjectCommandOutput,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -24,6 +25,13 @@ function createS3Client(conn: S3Connection) {
   return new S3Client({
     region: conn.region,
     endpoint: conn.endpoint ?? undefined,
+    // Presigned PUT URLs from AWS SDK v3 can include flexible-checksum query params
+    // (e.g. `x-amz-sdk-checksum-algorithm` + `x-amz-checksum-crc32`). If the client
+    // doesn't compute/send the matching checksum, S3 responds 403.
+    //
+    // We only want checksums when explicitly required by the API; keep presigned URLs
+    // broadly compatible with browsers and S3-compatible providers.
+    requestChecksumCalculation: "WHEN_REQUIRED",
     credentials: {
       accessKeyId: conn.accessKeyId,
       secretAccessKey: conn.secretAccessKey,
@@ -66,6 +74,15 @@ export async function getDownloadUrl(conn: S3Connection, key: string): Promise<s
   });
 
   return getSignedUrl(s3Client, command, { expiresIn: DOWNLOAD_URL_EXPIRY });
+}
+
+export async function getObject(conn: S3Connection, key: string): Promise<GetObjectCommandOutput> {
+  const s3Client = createS3Client(conn);
+  const command = new GetObjectCommand({
+    Bucket: conn.bucket,
+    Key: key,
+  });
+  return s3Client.send(command);
 }
 
 /**

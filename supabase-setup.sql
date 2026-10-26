@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS photos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- If you created tables before adding new columns, CREATE TABLE IF NOT EXISTS won't update them.
+-- Keep this setup idempotent by adding critical columns when missing.
+ALTER TABLE photos
+    ADD COLUMN IF NOT EXISTS processing_status TEXT NOT NULL DEFAULT 'pending';
+
 -- Albums table
 CREATE TABLE IF NOT EXISTS albums (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
